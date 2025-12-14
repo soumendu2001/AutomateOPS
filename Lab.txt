@@ -1,0 +1,255 @@
+1. Declaring variable and displaying its value (Simple Variables)
+# Every yaml file optionally can start with 3 dashes 
+---
+name: Declaring a variable and displaying
+hosts: target
+gather_facts: false
+# vars: variables that will apply to the play, on all target systems
+vars:
+example_key_1: 'This is an example'
+tasks:
+ - name: Test Dictionary Key value
+   ansible.builtin.debug:
+            msg: "{{ example_key_1 }}"
+
+# Every yaml file optionally can end with 3 dots
+...
+
+2. Declaring a dictionary and displaying its key and values (Dictionaries)
+
+# Every yaml file optionally can start with 3 dashes
+---
+- name: Declaring a dictionary and displaying its key and values
+  hosts: target
+  gather_facts: false
+# vars: variables that will apply to the play, on all target systems
+  vars:
+  dict:
+   dict_key: 'This is a dictionary value'
+  tasks:
+  - name: Displaying Dictionary value
+    ansible.builtin.debug:
+      msg: "{{ dict }}"
+  - name: Displaying dictionary key using dot notation
+    ansible.builtin.debug:
+      msg: "{{ dict.dict_key }}"
+  - name: Displaying dictionary value using python bracket notation
+    ansible.builtin.debug:
+      msg: "{{ dict['dict_key'] }}"
+	
+# Every yaml file optionally can end with 3 dots
+...
+
+3. Declaring an inline dictionary and displaying its key and values (Inline Dictionary)
+
+# Every yaml file optionally can start with 3 dashes
+---
+- name: Declaring an inline dictionary and displaying its key and values
+  hosts: target
+  gather_facts: false
+# vars: variables that will apply to the play, on all target systems
+  vars:
+    example_dict:
+      { example: 'This is an inline dictionary value'}
+  tasks:
+    - name: Displaying Dictionary value
+      ansible.builtin.debug:
+        msg: "{{ example_dict }}"
+    - name: Displaying dictionary key using dot notation
+      ansible.builtin.debug:
+        msg: "{{ example_dict.example }}"
+    - name: Displaying dictionary value using python bracket notation
+      ansible.builtin.debug:
+        msg: "{{ example_dict['example'] }}"
+# Every yaml file optionally can end with 3 dots
+...
+
+4. Declaring a list and displaying its values (List)
+
+# Every yaml file optionally can start with 3 dashes
+---
+- name: Declaring a list and displaying its values
+  hosts: target
+  gather_facts: false
+# vars: variables that will apply to the play, on all target systems
+  vars:
+    my_list:
+      - item1 
+      - item2
+      - item3
+      - item4
+      - item5
+  tasks:
+  - name: Displaying List value
+    ansible.builtin.debug:
+      msg: "{{ my_list }}"
+
+  - name: Displaying 1st list item through dot notation
+    ansible.builtin.debug:
+      msg: "{{ my_list.0 }}"
+  - name: Displaying 1st list item using python bracket notation
+    ansible.builtin.debug:
+       msg: "{{ my_list[0] }}"
+  - name: Displaying 2nd list item using python dot notation
+    ansible.builtin.debug:
+      msg: "{{ my_list.1 }}"
+
+  - name: Displaying 2nd item using python bracket notation
+    ansible.builtin.debug:
+      msg: "{{ my_list[1] }}"
+  
+# Every yaml file optionally can end with 3 dots
+...
+5. Create an external_dict.yaml as below: External Variable
+
+---
+external_example_key: external_example_key_value
+
+external_inline_dict:
+  {inline_dict_key: This is an inline dictionary value}
+
+external_list:
+   - item1
+   - item2
+   - item3
+   - item4
+   - item5
+
+external_inline_named_list: [ external_item1, external_item2, external_item3, external_item4, external_item5]
+...
+Create Test.yaml file as below:
+
+---
+- name: Displaying External Dictionary
+  hosts: target
+  gather_facts: false
+  #vars: variables that will apply to the play, on all target systems
+  vars_files:
+   - external_dict.yaml
+
+  tasks:
+  - name: Displaying external dictionary key value
+    ansible.builtin.debug:
+       msg: "{{ external_example_key }}"
+  - name: Displaying external inline dictionary
+    ansible.builtin.debug:
+      msg: "{{ external_inline_dict }}"
+  - name: Displaying external dictionary named external_inline_dict through dot operator
+    ansible.builtin.debug:
+      msg: "{{ external_inline_dict.inline_dict_key}}"
+
+  - name: Displaying external dictionary named external_inline_dict through Python brackets notation
+    ansible.builtin.debug:
+      msg: "{{ external_inline_dict['inline_dict_key'] }}"
+  - name: Displaying external list
+    ansible.builtin.debug:
+      msg: "{{ external_list }}"
+
+  - name: Displaying 1st item of external list through dot operator
+    ansible.builtin.debug:
+      msg: "{{ external_list.0 }}"
+
+  - name: Displaying 1st item of external list through python bracket
+    ansible.builtin.debug:
+      msg: "{{ external_list[0] }}"
+
+  - name: Displaying external inline named list
+    ansible.builtin.debug:
+      msg: "{{external_inline_named_list }}"
+  - name: Displaying external inline named list 1st item through dot operator
+    ansible.builtin.debug:
+      msg: "{{ external_inline_named_list.0}}" 
+  - name: Displaying external inline named list 1st item through python bracket
+    ansible.builtin.debug:
+      msg: "{{ external_inline_named_list[0] }}"
+...
+
+6. Create an external prompt (vars prompt)
+
+---
+hosts: target
+gather_facts: false
+# vars: variables that will apply to the play, on all target systems
+vars_prompt:
+  - name: username
+    private: false
+  - name: password
+    private: true
+tasks:
+ - name: Test Variable Prompt for Username
+   ansible.builtin.debug:
+        msg: "Username is : {{ username }} and Password is : {{password }}"
+
+...
+
+7. Using Ansible variables (Host facts and default) - Add ansible_port as 22
+ 
+---
+- hosts: target
+  gather_facts: true
+  vars:
+  tasks:
+   - name: Collecting  ansible port information using host_vars using ansible_facts using Dot notation
+     ansible.builtin.debug:
+           msg: "{{ hostvars[ansible_hostname].ansible_port }}"
+   
+  - name: Collecting  ansible port information using host_vars using ansible_facts using python bracket notation
+     ansible.builtin.debug:
+           msg: "{{ hostvars[ansible_hostname]['ansible_port'] }}"
+ 
+...
+
+
+8. Using Ansible variables along with default values ( Host Facts & Defaults)
+ 
+---
+- name: Host and facts( default) - 2
+  hosts: target
+  gather_facts: true
+  vars:
+  tasks:
+   - name: Collecting  ansible port information using host_vars using ansible_facts using Dot notation
+     ansible.builtin.debug:
+       msg: "{{ hostvars[ansible_hostname].ansible_port | default('22') }}"
+   
+   - name: Collecting  ansible port information using host_vars using ansible_facts using python bracket notation
+     ansible.builtin.debug:
+       msg: "{{ hostvars[ansible_hostname]['ansible_port'] | default('22')}}"
+...
+
+9. Using Ansible group_vars and collecting ansible User information (group_vars & Overrides)
+ 
+
+---
+- hosts: target
+  gather_facts: true
+  tasks:
+    - name: Collect ansible_user using dot notation
+      ansible.builtin.debug:
+        msg: "{{ hostvars[ansible_hostname].ansible_user }}"
+
+    - name: Collect ansible_user using bracket notation
+      ansible.builtin.debug:
+        msg: "{{ hostvars[ansible_hostname]['ansible_user'] }}"
+...
+
+9. Using Ansible group_vars and collecting ansible User information - Passing extra variable (group_vars & Overrides)
+
+Create Test.yaml using below content
+---
+- hosts: target
+  gather_facts: true
+  tasks:
+    - name: Collect ansible_user using dot notation
+      ansible.builtin.debug:
+        msg: "{{ hostvars[ansible_hostname].ansible_user }}"
+
+    - name: Collect ansible_user using bracket notation
+      ansible.builtin.debug:
+        msg: "{{ hostvars[ansible_hostname]['ansible_user'] }}"
+...
+
+ansible-playbook Test.yaml -e "ansible_user=myadmin" - it should fail.
+
+
+
