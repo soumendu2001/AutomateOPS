@@ -1,0 +1,459 @@
+Jinja2
+
+Ansible Jinja2 if statement
+
+1. Jinja 2 if Statement
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- name: Demo of Jinja2 if statement
+   # hosts: Where our plays will run and options it will run with
+  hosts: all
+# Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+  tasks:
+    - name: Ansible Jinja2 if Statement
+      ansible.builtin.debug:
+        msg: >
+              --== Ansible Jinja2 if statement ==--
+              {# if the hostname is Control, include a message -#}
+              {% if ansible_hostname == 'Control' %}
+                   This is a control Server
+              {% endif %}
+   
+# Three dots indicate end of YAML document
+...
+=============================================
+
+2. Ansible Jinja2 elif
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- name: Ansible Jinja2 if-elfif demo
+   # hosts: Where our plays will run and options it will run with
+   hosts: all
+# Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+tasks:
+ - name: Ansible Jinja2 elif
+   ansible.builtin.debug:
+          msg: >
+               --== Ansible Jinja2 if elif statement ==--
+               
+	       {# if the hostname is Control, include a message -#}
+               {% if ansible_hostname == 'Control' -%}
+                    This is a control Server
+               {% elif ansible_hostname == 'Target1' -%}
+                    This is Target1 
+               {% endif %}
+   
+
+# Three dots indicate end of YAML document
+...
+
+3. Ansible Jinja2 else 
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- 
+   # hosts: Where our plays will run and options it will run with
+   hosts: all
+# Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+tasks:
+ - name: Ansible Jinja2 if elif else 
+   ansible.builtin.debug:
+          msg: >
+               --== Ansible Jinja2 if elif else statement ==--
+               
+	       {# if the hostname is Control, include a message -#}
+               {% if ansible_hostname == 'Control' -%}
+                    This is a control Server and it is inside if section
+               {% elif ansible_hostname == 'Target1' -%}
+                    This is Target1 and It is inside the elif section
+               {%else -%}
+                     This is in else section and hostname is ansible_hostname
+               {% endif %}
+   
+
+# Three dots indicate end of YAML document
+...
+
+4. if variable is defined
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- name: Ansible if demo
+   # hosts: Where our plays will run and options it will run with
+  hosts: all
+# Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+  tasks:
+    - name: Ansible Jinja2 if variable is defined
+      ansible.builtin.debug:
+          msg: >
+               --== Ansible Jinja2 if variable is defined ==--
+               {%if example_variable is defined -%}
+                    example_variable is defined
+               {%else -%}
+                     example_variable is not defined.
+               {% endif %}
+   
+
+# Three dots indicate end of YAML document
+...
+
+5. if variable is defined
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- name: Demo if variable is defined
+   # hosts: Where our plays will run and options it will run with
+  hosts: all
+# Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+  tasks:
+    - name: Ansible Jinja2 if variable is defined
+      ansible.builtin.debug:
+          msg: >
+               --== Ansible Jinja2 if variable is defined (where variable is defined) ==--
+               {% set example_variable  = 'defined' -%}
+	       {%if example_variable is defined -%}
+                    example_variable is defined
+               {%else -%}
+                     example_variable is not defined.
+               {% endif %}
+   
+
+# Three dots indicate end of YAML document
+...
+
+6. Demo of For loop
+
+1. Create main playbook with below content
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- name: For Loop
+   # hosts: Where our plays will run and options it will run with
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - services.yaml
+# Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+  tasks:
+    - name: Displaying Service name
+      ansible.builtin.debug:
+        msg: >
+          --== Ansible For Loop ==--
+          {% for svc in service_list -%}
+          service {svc}
+          {% endfor %} 
+    - name: Displaying ServiceName, port and state
+      ansible.builtin.debug:
+         msg: >
+          -- == ServiceName, Port name and State == --
+          {% for svcname, svcport in services_dict.items() -%}
+            servicename {{ svcname }} {
+            port = {{svcport.port}}
+            state = {{ svcport.state }}
+            }
+          {% endfor %}
+
+    - name: Displaying Service Names which are enabled only
+      ansible.builtin.debug:
+        msg: >
+          -- == Filter by state=enabled --==
+             {% for svcname, svcport in services_dict.items()-%}
+               {% if svcport.state== 'enabled' %}
+                 {{svcname}} is enabled on {{svcport.port}}
+               {% endif %}
+             {% endfor %}   
+                     
+
+# Three dots indicate end of YAML document
+... 
+Create services.yaml as below:
+
+service_list:
+  - nginx
+  - redis
+  - mysql
+
+
+services_dict:
+  nginx:
+    port: 80
+    state: enabled
+  redis:
+    port: 6379
+    state: disabled
+  mysql:
+    port: 3306
+    state: enabled
+
+7. Demo of range
+
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- 
+   # hosts: Where our plays will run and options it will run with
+   hosts: all
+   gather_facts: false
+   vars_files:
+        - Services.yaml
+   # Tasks: the list of tasks that will be executed within the play, this section
+# can also be used for pre and post tasks
+tasks:
+  - name: Demo of range through numbers
+    ansible.builtin.debug:
+               msg: >
+                    {% for entry in range(1,11) -%}
+                        {{ entry }} {{ entry * entry }}
+                    { % endfor %}
+
+  - name: Reverse Range ( 10 to 1, breaking at 5 )
+    ansible.builtin.debug:
+	msg: >
+             -== Ansible jinja2 reverse loop ==--
+             {% for entry in (10,0, -1) -%}
+               { % if entry == 5 -%}
+                 {% break %}
+               {% endif  -%}
+             {{ entry}}
+             {% endfor -%}
+    
+              
+  - name: Demo of range through dictionary
+    ansible.builtin.debug:
+           msg: >
+                -- == Displaying the range through Dictionary ==--
+                {% for i in range(services_list | length) -%}
+                   {{i+1}} . {{services_list[i]}}
+                {% end for %}
+
+                    
+
+# Three dots indicate end of YAML document
+...
+
+8. Split Demo example
+===========================
+# YAML documents beginning with document separator ---
+---
+# The minus in the YAML document indicates a list item. The playbook
+# contains a list of plays with each play being a dictionary
+- name: Jinja2 filters demo split
+  # hosts: Where our plays will run and options it will run with
+  hosts: control
+  gather_facts: false
+  vars_files:
+    - filters.yaml
+  vars:
+    list_str: "{{ csv_services | split( ',') }}"
+    #Split name:port into two parts
+    Pair: "{{ colon_service | split( ':') }}"
+    Name: "{{ colon_service | split( ':') | first }}"
+    Port: "{{ colon_service | split( ':') | last }}"
+
+  # Split comma-separated string to list
+  tasks:
+    - name: Display Split comma seperate string to list ( before Split)
+      ansible.builtin.debug:
+        msg: >
+             Raw String: {{ csv_services }}
+             List String: {{ list_str }}
+
+    - name: DisplaySplit comma seperated string (after split)
+      ansible.builtin.debug:
+        msg: >
+           After Split, the string becomes list as {{ list_str }}
+           # Iterate after split
+           {% for svc in csv_services | split( ',') -%}
+               Service: {{ svc}}
+           {% endfor %}
+
+    - name: Display Split String
+      ansible.builtin.debug:
+        msg: "{{ Name }}, {{ Port}} , {{Pair }}"
+
+    - name: Display Split and Map Dictionary
+      ansible.builtin.debug:
+        msg: >
+              {% set name_port = colon_service | split( ':') %}
+              {% set service_dict = {'name': name_port[0], 'port': (name_port[1] | int) } %}
+                service_dict =  {{ service_dict }}
+              {{ service_dict }}
+...
+==========================
+
+
+create filters.yaml as below:
+
+================================================
+# For split
+csv_services: "nginx,redis,mysql,haproxy"
+colon_service: "nginx:80"
+
+
+# For dict2items / items2dict
+services_dict:
+  nginx:
+    port: 80
+    enabled: true
+  redis:
+    port: 6379
+    enabled: false
+  mysql:
+    port: 3306
+    enabled: true
+================================================
+
+9. Create Playbook as below for dict2items
+  
+ubuntu@Control:~$ cat demo_dict2items.yaml 
+
+---
+- name: Jinja2 filters demo of dict2items
+  hosts: localhost
+  gather_facts: false
+
+  vars_files:
+    - filters.yaml
+
+  # If you prefer precomputing filtered items as variables, do it in vars: with {{ ... }}
+  vars:
+    enabled_items: >-
+      {{ services_dict
+         | dict2items
+         | selectattr('value.enabled', 'equalto', true)
+         | list }}
+    # Rename fields: produce [{'name': <key>, 'cfg': <value>}, ...]
+    transformed_items: >-
+     {{  services_dict
+         | dict2items
+         | json_query( '[].{name: key,cfg: value }') }}
+      
+  tasks:
+    - name: Display original dictionary
+      ansible.builtin.debug:
+        var: services_dict
+
+    - name: Display items created from dictionary (dict2items)
+      ansible.builtin.debug:
+        msg: "{{ services_dict | dict2items }}"
+
+    - name: Iterate items using loop
+      ansible.builtin.debug:
+        msg: "name={{ item.key }} port={{ item.value.port }} state={{ item.value.enabled }}"
+      loop: "{{ services_dict | dict2items }}"
+
+    - name: Display enabled items sorted by key (without precomputed var)
+      ansible.builtin.debug:
+        msg: "* {{ item.key }} : {{ item.value.port }}"
+      loop: >-
+        {{ services_dict
+           | dict2items
+           | selectattr('value.enabled', 'equalto', true)
+           | sort(attribute='key') }}
+
+    - name: Display enabled items (using precomputed var)
+      ansible.builtin.debug:
+        msg: "{{ item.key }} : {{ item.value.port }}"
+      loop: "{{ enabled_items | sort(attribute='key') }}"
+
+
+    - name: Show transformed items (renamed fields)
+      ansible.builtin.debug:
+        var: transformed_items
+...
+
+# ITEMS2DICT EXAMPLES
+
+Create example.yaml file as below:
+
+---
+- name: Jinja2 filters demo items2dict
+  hosts: localhost
+  gather_facts: false
+
+  vars_files:
+    - filters.yaml   # should define `services_dict`, see sample below
+
+  # Precompute values safely using inline Jinja in vars:
+  vars:
+    # 5.1 Manual list of [key, value] pairs → dict
+    pairs_list:  # as list of lists: [key, value]
+      - ['nginx', {'port': 80, 'enabled': true}]
+      - ['redis', {'port': 6379, 'enabled': false}]
+      - ['mysql', {'port': 3306, 'enabled': true}]
+
+    # Same as list of dicts with 'key' and 'value' (also accepted by items2dict)
+    pairs_items_style: >-
+      {{ pairs_list | map('zip', [0,1]) | list }}  # (ignore; just showing transform idea)
+
+    # Back to dict from the manual list
+    pairs_dict: "{{ dict(pairs_list)}}"
+
+    # Roundtrip: dict → items → dict
+    roundtrip_dict: >-
+      {{ (services_dict | dict2items) | items2dict }}
+
+    # Enabled items only (using selectattr), then back to dict
+    enabled_items: >-
+      {{ services_dict
+         | dict2items
+         | selectattr('value.enabled', 'equalto', true)
+         | list }}
+    enabled_dict: >-
+      {{ enabled_items | items2dict }}
+
+    # 5.2 Create dict from split results (dynamic construction)
+    svc_line: "haproxy:8080"
+    split_pair: >-
+      {{ svc_line | split( ':') }}
+    new_pairs: >-
+      {{ [ [ split_pair[0], {'port': (split_pair[1] | int), 'enabled': true} ] ] }}
+    new_dict_from_items2dict: "{{ dict(new_pairs) }}"
+
+  tasks:
+    - name: Show services_dict from vars_files
+      ansible.builtin.debug:
+        var: services_dict
+
+    - name: Show manual pairs list (list of [key, value])
+      ansible.builtin.debug:
+        var: pairs_list
+
+    - name: Convert manual pairs_list back to dict (items2dict)
+      ansible.builtin.debug:
+        var: pairs_dict
+
+    - name: Roundtrip services_dict -> dict2items -> items2dict
+      ansible.builtin.debug:
+        var: roundtrip_dict
+
+    - name: Enabled items (list of {key,value}) then items2dict
+      ansible.builtin.debug:
+        var: enabled_dict
+
+    - name: New dict from split "haproxy:8080" via items2dict
+      ansible.builtin.debug:
+        var: new_dict_from_items2dict
+
+...
