@@ -279,7 +279,7 @@ tasks:
              Raw String: {{ csv_services }}
              List String: {{ list_str }}
 
-    - name: DisplaySplit comma seperated string (after split)
+    - name: Display Split comma seperated string (after split)
       ansible.builtin.debug:
         msg: >
            After Split, the string becomes list as {{ list_str }}
