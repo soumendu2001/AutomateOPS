@@ -160,7 +160,7 @@ tasks:
         msg: >
           --== Ansible For Loop ==--
           {% for svc in service_list -%}
-          service {svc}
+          service {{svc}}
           {% endfor %} 
     - name: Displaying ServiceName, port and state
       ansible.builtin.debug:
