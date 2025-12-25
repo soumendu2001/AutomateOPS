@@ -1,0 +1,789 @@
+1) Hello World with variables + default
+mkdir Templates
+Template: hello.txt.j2
+
+Hello, {{ user_name }}!
+Welcome to {{ env | default('dev') }}.
+
+
+Playbook: hello.yaml
+
+---
+- name: Render a simple Hello file
+  hosts: all
+  vars:
+    user_name: "Soumyendu"
+  tasks:
+    - name: Create Text file ./Hello.txt
+      ansible.builtin.template:
+        src: Templates/hello.txt.j2
+        dest: ./Hello.txt
+        mode: '0644'
+    - name: Collect content of Hello.txt
+      ansible.builtin.slurp:
+             path: ./Hello.txt
+      register: file_content
+    - name: Display content of Hello.txt
+      ansible.builtin.debug:
+         msg: "{{ file_content['content'] | b64decvode }}"
+
+...
+
+Run: 
+
+1.ansible-playbook -i inventory hello.yaml --check --diff
+2. ansible-playbook hello.yaml
+
+ansible-playbook <filename.yaml> --diff --check
+
+combines two important flags:
+
+✅ --check (Dry Run Mode)
+
+Runs the playbook in check mode (also called dry run).
+Ansible simulates the tasks without making any actual changes on the remote hosts.
+Useful for previewing what would happen before applying changes.
+It shows which tasks would run and whether they would report changed or ok.
+
+
+✅ --diff (Show Differences)
+
+Displays differences in file contents when tasks modify files (e.g., template, copy, lineinfile).
+Shows what lines would be added/removed/changed.
+Works best with --check because you can see the changes without applying them.
+
+
+✅ Combined Effect
+
+--check ensures no changes are made.
+--diff shows exact differences that would occur if the playbook were applied.
+Together, they provide a safe preview of configuration changes.
+
+
+ Breakdown of @@ -0,0 +1,2 @@
+
+@@ → Marks the start of a diff hunk (a block of changes).
+-0,0 → Refers to the old file:
+
+Start at line 0 (before the first line).
+0 lines in the old file (because the file didn’t exist or was empty).
+
+
++1,2 → Refers to the new file:
+
+Start at line 1.
+2 lines added in the new file.
+
+
+
+So this means:
+
+The old file had no content.
+The new file has 2 lines added starting at line 1.
+
+
+✅ Why do you see +Hello Soumyendu and +Welcome to dev?
+
+Lines prefixed with + are added in the new version.
+If there were lines removed, they would be prefixed with -.
+
+==============================================================
+
+2) Basic conditionals (if/else)
+Template: app.cfg.j2
+
+
+debug={{ 'true' if enable_debug else 'false' }}
+log_level={{ 'DEBUG' if enable_debug else 'INFO' }}
+
+Playbook: app_cfg.yaml
+
+Create myapp and app.cfg
+mkdir myapp
+touch /etc/myapp/app.cfg
+
+---
+- name: Render config with conditions
+  hosts: all
+  become: yes
+  vars:
+    enable_debug: false
+    dir_name: "myapp"
+    file_name: "app.cfg"
+    total_path: "/etc/{{dir_name}}/{{ file_name}}"
+  tasks:
+    - name: Create the destination directory
+      ansible.builtin.file:
+        state: directory
+        path: '/etc/{{dir_name}}'
+        mode: '0644'
+    - name: Create the config file
+      ansible.builtin.file:
+        state: touch
+        path: '{{ total_path }}'
+        mode: '0644'
+    - name: Render /etc/myapp/app.cfg
+      ansible.builtin.template:
+        src: Templates/app.cfg.j2
+        dest: "{{ total_path }}"
+        backup: yes
+    - name: Collect content of the {{ total_path }} file
+      ansible.builtin.slurp:
+        path: "{{ total_path }}"
+      register: file_content
+    - name: Display Content of {{ total_path }} file
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+...
+
+3) Basic loops over a list
+
+Template: hosts.j2
+
+# Generated hosts
+{% for host in web_hosts %}
+{{ host.name}} {{ host.ip }}
+{% endfor %}
+
+Playbook: hosts_file.yaml
+
+---
+- name: Demonstration of the loop for Template
+  hosts: target
+  become: yes
+  vars:
+    file_name: 'hosts.generated'
+    dir_name: "/tmp"
+    total_path: "{{dir_name}}/{{file_name}}"
+    web_hosts:
+      - {name: 'web_01' , ip: '10.0.0.111'}
+      - {name: 'web_02' , ip: '10.0.0.112'}
+  tasks:
+    - name: create files in target servers ( {{ total_path }})
+      ansible.builtin.file:
+        state: touch
+        path: "{{ total_path }}"
+    - name: Show web_host nicely
+      ansible.builtin.debug:
+        msg: "{{ web_hosts | to_nice_json(indent=2) }}"
+    - name: Updating files into Target Servers ( {{ total_path }})
+      ansible.builtin.template:
+        src: "Templates/loop_demo.j2"
+        dest: "{{ total_path }}"
+    - name: Read content of  ( {{ total_path }})
+      ansible.builtin.slurp:
+        path: "{{ total_path }}"
+      register: file_content    
+    - name: Display content of ( {{ total_path }} )
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+...
+
+4) Looping a dictionary (key/value)
+Template: settings.ini.j2
+
+# Simple INI-like settings
+{% for k, v in settings.items() %}
+{{ k }}={{ v }}
+{% endfor %}
+
+
+Playbook: settings.yaml
+
+---
+- name: Render settings from a dictionary
+  become: yes
+  hosts: target
+  vars:
+    settings:
+      app_name: AutomateOps
+      region: ap_south-1
+      replicas: 3
+
+    dir_name: "/tmp"
+    file_name: "settings.txt"
+    total_path: "{{ dir_name}}/{{file_name}}"
+  tasks:
+    - name: Creating destination path
+      ansible.builtin.file:
+        state: touch
+        path: "{{ total_path }}"
+    - name: Existence of {{ total_path }}
+      ansible.builtin.stat:
+        path: "{{ total_path }}"
+      register: file_exists
+    - name: Update {{ total_path }}
+      ansible.builtin.template:
+        src: "Templates/settings.ini.j2"
+        dest: "{{ total_path}}"
+      when: file_exists.stat.exists
+    - name: Read content of ( {{ total_path }} )
+      ansible.builtin.slurp:
+        path: "{{ total_path }}"
+      register: file_content
+    - name: Display content of ( {{ total_path }} )
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+
+...
+
+
+5) Using filters (upper, join, sort, to_nice_yaml/JSON)
+
+Template: filters_demo.txt.j2
+
+APP UPPER: {{ app_name | upper }}
+PACKAGES: {{ packages | sort | join(' ') }}
+
+YAML SETTINGS:
+{{ settings | to_nice_yaml }}
+
+JSON SETTINGS:
+{{ settings | to_nice_json }}
+
+
+Playbook: filters_demo.yaml
+
+---
+- name: Show common Jinja filters
+  hosts: all
+  vars:
+    dest: "/tmp/filters_demo.txt"
+    app_name: automateops
+    packages: ['git', 'nginx', 'htop']
+    settings:
+      feature_x: true
+      threshold: 75
+      team: "SRE"
+  tasks:
+    - name: Write filters demo
+      template:
+        src: Templates/filters_demo.txt.j2
+        dest: /tmp/filters_demo.txt
+
+
+    - name: Collect Content of {{ dest}}
+      ansible.builtin.slurp:
+        path: "{{ dest}}"
+      register: file_content
+
+    - name: Display Content of {{dest}}
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+...
+-------------------
+
+6) Escaping Jinja and whitespace control
+
+Template: escaping_whitespace.j2
+
+{% raw %}
+{{ this will not render }}
+{% endraw %}
+
+{% for x in [1,2,3] -%}
+{{ x }} {% if not loop.last %},{% endif %}
+{% endfor %}
+
+
+Playbook: escaping.yaml
+---
+- name: Render Escaping Demo
+  hosts: target
+  become: yes
+  vars:
+    src_filename: "./Templates/escaping_whitespace.j2"
+    dest_filename: "/tmp/escaping_whitespace.txt"
+  tasks:
+    - name: Create destination files
+      ansible.builtin.file:
+        state: touch
+        path: "{{ dest_filename}}"
+
+    - name: Read content of the pre-rendered file {{ src_filename }}
+      ansible.builtin.debug:
+        msg: "{{ lookup('template',src_filename)}}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Check existence of target files
+      ansible.builtin.stat:
+        path: "{{ dest_filename }}"
+      register: dest_file_exists
+
+    - name: Render Escaping Demo
+      ansible.builtin.template:
+        src: "{{ src_filename }}"
+        dest: "{{ dest_filename }}"
+      when: dest_file_exists.stat.exists
+
+    - name: Read content of remote file {{ dest_filename }} in check mode
+      ansible.builtin.slurp:
+        path: "{{ dest_filename}}"
+      register: file_content
+      when: not ansible_check_mode
+
+    - name: Displaying content of {{ dest_filename}} in check mode
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+      when: not ansible_check_mode
+...
+
+7) Using Ansible facts in templates
+Template: facts.j2
+
+Hostname: {{ ansible_hostname}}
+All_IpV4: {{ ansible_all_ipv4_addresses | join(', ') }}
+CPU_Count: {{ ansible_facts['processor_vcpus'] | default('unknown') }}
+
+Playbook: facts.yaml
+---
+- name: use facts in template
+  hosts: target
+  become: yes
+  vars:
+    src_filename: "./Templates/facts.j2"
+    dest_filename: "/tmp/system_facts.txt"
+  tasks:
+    - name: Check existence of source file
+      ansible.builtin.stat:
+        path: "{{ src_filename}}"
+      register: src_file
+      delegate_to: localhost
+      run_once: true
+    - name: render system facts
+      ansible.builtin.template:
+        src: "{{ src_filename }}"
+        dest: "{{ dest_filename }}"
+      when: src_file.stat.exists
+    - name: Read content of the destination file {{ dest_filename }}
+      ansible.builtin.slurp:
+             path: "{{ dest_filename }}"
+      register: file_content
+    - name: Read content of destination file ({{ dest_filename }})
+      ansible.builtin.debug:
+               msg: "{{file_content['content'] | b64decode}}"
+
+...
+
+
+
+8) Generate a .env file (string quoting & defaults)
+
+Template: .env.j2
+
+
+APP_NAME="{{ app_name }}":
+ENV="{{ env | default('dev') }}"
+DEBUG="{{ debug | default(false) }}"
+PORT="{{ port | default(8080) }}"
+
+
+Playbook: env_file.yaml
+
+---
+- name: Render en env file
+  hosts: target
+  become: yes
+  vars:
+    app_name: soumyendu
+    debug: true
+    dir_name: "myapp"
+    file_name: ".env"
+    src_path: "./Templates/.env.j2"
+    total_path: "/opt/{{ dir_name}}/{{file_name}}"
+  tasks:
+    - name: Create myapp directory
+      ansible.builtin.file:
+        state: directory
+        path: "/opt/{{dir_name}}"
+    - name: Validate existence of source file {{ src_path }}
+      ansible.builtin.stat:
+        path: "{{ src_path }}"
+      register: file_exists
+      delegate_to: localhost
+      run_once: true
+    - name: Render /opt/myapp/.env
+      ansible.builtin.template:
+        src: "./Templates/.env.j2"
+        dest: "{{ total_path}}"
+        mode: '0600'
+      when: file_exists.stat.exists
+
+    - name: Read content of /opt/myapp/.env
+      ansible.builtin.slurp:
+        path: "{{total_path}}"
+      register: file_content
+    - name: Read content of /opt/myapp/.env
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+...
+
+
+9) Safer config deployment with validate + backup (Nginx)
+
+
+=============================
+
+# Templates/nginx.conf.j2
+server {
+    listen {{ nginx_port }};
+    server_name {{ server_name }};
+    root {{ document_root }};
+    index index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+
+=============================
+
+Create service.yaml
+
+services_list_ubuntu:
+ - apache2
+ - redis
+ - redis-server
+ - mysql-server
+
+al2023_services_list:
+   - httpd
+   - redis
+   - redis-server
+   - mysql-server
+
+Playbook: nginx_validate.yaml
+
+================================- name: Deploy nginx configuration via template with validation
+  hosts: target
+  become: true
+  vars_files:
+    - service.yaml
+  vars:
+    nginx_port_ubuntu: 8080    # Use 8080 if Apache stays on 80
+    nginx_port_al2023: 80
+    server_name: "example.com"
+    document_root: "/var/www/html"
+    site_dir_ubuntu: "/etc/nginx/sites-available"
+    site_enable_ubuntu: "/etc/nginx/sites-enabled/default"
+    al2023_conf_dir: "/etc/nginx/conf.d"
+    al2023_conf_file: "/etc/nginx/conf.d/default.conf"
+
+  tasks:
+    - name: Show target OS
+      ansible.builtin.debug:
+        msg: "OS of {{ ansible_hostname }} is {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    # ------------------------------
+    # Packages - Ubuntu
+    # ------------------------------
+    - name: Update Ubuntu cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Install packages on Ubuntu
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ services_list_ubuntu }}"
+      when: ansible_distribution == 'Ubuntu'
+
+    # ------------------------------
+    # Packages - Amazon Linux 2023
+    # ------------------------------
+    - name: Install packages on Amazon Linux (nginx, redis6, mariadb)
+      ansible.builtin.dnf:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ al2023_services_list }}"
+      when:
+        - ansible_distribution == 'Amazon'
+        - ansible_distribution_major_version|int == 2023
+
+    - name: Enable & start Redis (redis6) on Amazon Linux
+      ansible.builtin.service:
+        name: redis6
+        state: started
+        enabled: true
+      when:
+        - ansible_distribution == 'Amazon'
+        - ansible_distribution_major_version|int == 2023
+
+    - name: Enable and Start MariaDB on AL2023
+      ansible.builtin.service:
+        name: mariadb
+        enabled: true
+        state: started
+      when:
+        - ansible_distribution == 'Amazon'
+        - ansible_distribution_major_version | int == 2023
+
+    # ------------------------------
+    # Ubuntu nginx / Apache port conflict handling
+    # ------------------------------
+    # OPTION A: Keep Apache running on 80, ensure nginx uses 8080
+    # (If you want OPTION B instead, see the alternative block below)
+    - name: Ensure {{ site_dir_ubuntu }} exists (Ubuntu)
+      ansible.builtin.file:
+        state: directory
+        path: "{{ site_dir_ubuntu }}"
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Deploy Ubuntu server block to sites-available/default (listen on {{ nginx_port_ubuntu }})
+      ansible.builtin.template:
+        src: "./Templates/nginx.conf.j2"
+        dest: "{{ site_dir_ubuntu }}/default"
+        backup: true
+        validate: "bash -lc 'nginx -t -c /etc/nginx/nginx.conf && cat %s >/dev/null'"
+      when: ansible_distribution == 'Ubuntu'
+      notify: "Restart nginx"
+      vars:
+        nginx_port: "{{ nginx_port_ubuntu }}"
+
+    - name: Ensure sites-enabled/default symlink exists (Ubuntu)
+      ansible.builtin.file:
+        state: link
+        src: "{{ site_dir_ubuntu }}/default"
+        dest: "{{ site_enable_ubuntu }}"
+        force: true
+      when: ansible_distribution == 'Ubuntu'
+      notify: "Restart nginx"
+
+    # OPTIONAL: If you want nginx to take port 80 instead, stop Apache first
+    # - name: Stop and disable Apache on Ubuntu (alternative to run nginx on 80)
+    #   ansible.builtin.service:
+    #     name: apache2
+    #     state: stopped
+    #     enabled: false
+    #   when: ansible_distribution == 'Ubuntu'
+
+    # ------------------------------
+    # Amazon Linux 2023 nginx config
+    # ------------------------------
+    - name: Ensure /etc/nginx/conf.d exists (AL2023)
+      ansible.builtin.file:
+        state: directory
+        path: "{{ al2023_conf_dir }}"
+      when:
+        - ansible_distribution == 'Amazon'
+        - ansible_distribution_major_version|int == 2023
+
+    - name: Deploy AL2023 server block to conf.d/default.conf (listen on {{ nginx_port_al2023 }})
+      ansible.builtin.template:
+        src: "./Templates/nginx.conf.j2"
+        dest: "{{ al2023_conf_file }}"
+        backup: true
+        validate: "bash -lc 'nginx -t -c /etc/nginx/nginx.conf && cat %s >/dev/null'"
+      when:
+        - ansible_distribution == 'Amazon'
+        - ansible_distribution_major_version|int == 2023
+      notify: "Restart nginx"
+      vars:
+        nginx_port: "{{ nginx_port_al2023 }}"
+
+    # ------------------------------
+    # Start/enable nginx AFTER configs are deployed & validated
+    # ------------------------------
+    - name: Apply pending handlers immediately so nginx has valid config
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable nginx to start on boot (all hosts that have nginx)
+      ansible.builtin.service:
+        name: nginx
+        enabled: true
+
+    - name: Start (or restart) nginx now that config is valid
+      ansible.builtin.service:
+        name: nginx
+        state: started
+
+  handlers:
+    - name: Restart nginx
+      listen: "Restart nginx"
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+...
+
+
+
+================================
+validation:
+========================================
+
+---
+- name: Validate Nginx post-deploy on Target1/Target2
+  hosts: target
+  become: true
+  vars:
+    expected_server_name: "example.com"
+    document_root: "/var/www/html"
+    drop_index_if_missing: true
+
+  tasks:
+    # ---------- Info ----------
+    - name: Show OS
+      debug:
+        msg: "OS of {{ inventory_hostname }} is {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    # ---------- Syntax check ----------
+    - name: Run nginx -t as root
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    - name: Print nginx -t stderr (common place for messages)
+      debug:
+        var: nginx_test.stderr_lines
+
+    # ---------- Service status ----------
+    - name: Ensure nginx service is running
+      service:
+        name: nginx
+        state: started
+
+    # ---------- Port listening ----------
+    - name: Check if nginx is listening on :80
+      shell: "ss -tlnp | grep ':80' || true"
+      register: ss_80
+      changed_when: false
+
+    - name: Show ss output
+      debug:
+        var: ss_80.stdout_lines
+
+    # ---------- Document root ----------
+    - name: Ensure document root exists
+      file:
+        path: "{{ document_root }}"
+        state: directory
+
+    # Decide Nginx worker user per distro
+
+    - name: Determine nginx user per distro
+      set_fact:
+        nginx_user: "{{ ('www-data' if ansible_distribution == 'Ubuntu'
+                    else ('nginx' if ansible_distribution == 'Amazon' and (ansible_distribution_major_version|int) == 2023
+                          else 'nginx')) | trim }}"
+
+
+    # Load password entries so we can check if the user exists
+    - name: Load password database (for existence checks)
+      getent:
+        database: passwd
+
+    # Create user if missing
+    - name: Ensure nginx user exists if missing
+      user:
+        name: "{{ nginx_user }}"
+        system: yes
+        shell: /usr/sbin/nologin
+      when: ansible_facts.getent_passwd[nginx_user] is not defined
+
+    # Ownership & permissions
+    - name: Fix ownership and perms on document root
+      file:
+        path: "{{ document_root }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
+        mode: "0755"
+        state: directory
+
+    # ---------- Content for HTTP test ----------
+    - name: Check index.html presence
+      stat:
+        path: "{{ document_root }}/index.html"
+      register: index_stat
+
+    - name: Drop index.html if missing
+      copy:
+        dest: "{{ document_root }}/index.html"
+        content: "<h1>Welcome from {{ inventory_hostname }}</h1>\n"
+      when: drop_index_if_missing and not index_stat.stat.exists
+
+    # ---------- HTTP tests ----------
+    - name: Test HTTP with Host {{ expected_server_name }}
+      uri:
+        url: "http://localhost"
+        headers:
+          Host: "{{ expected_server_name }}"
+        return_content: yes
+      register: http_named
+
+    - name: Test HTTP with Host localhost
+      uri:
+        url: "http://localhost"
+        return_content: yes
+      register: http_local
+
+    # ---------- Summary ----------
+    - name: Summary
+      debug:
+        msg:
+          - "nginx -t: {{ 'OK' if 'test is successful' in (nginx_test.stderr|default('') + nginx_test.stdout|default('')) else 'FAILED' }}"
+          - "Listening on 80: {{ 'YES' if (ss_80.stdout|default('')) else 'NO' }}"
+          - "HTTP (Host={{ expected_server_name }}): status {{ http_named.status }} -> {{ (http_named.content|default(''))[:80] }}"
+          - "HTTP (Host=localhost): status {{ http_local.status }} -> {{ (http_local.content|default(''))[:80] }}"
+
+========================================
+
+11) INI-styled template with sections
+Template: app.ini.j2
+
+
+[general]
+name={{ app_name }}
+env={{ env | default('dev') }}
+
+[database]
+host={{ db.host }}
+port={{ db.port }}
+user={{ db.user }}
+
+Playbook: app_ini.yaml
+
+---
+- name: Render INI like configuration
+  hosts: target
+  become: yes
+  vars:
+    src_file: "./Templates/app.ini.j2"
+    dest_dir: "/etc/myapp"
+    dest_file: "{{ dest_dir}}/app.ini"
+    app_name: automateops
+    db:
+      host: 127.0.01
+      port: 3306
+      user: appuser
+      ip: 172.19.89.99
+  tasks:
+    - name: Create Destination Directory
+      ansible.builtin.file:
+        state: directory
+        path: "{{ dest_dir }}"
+
+    - name: Checking existence of Source file {{ src_file }}
+      ansible.builtin.stat:
+        path: "{{ src_file }}"
+      register: file_exists
+      delegate_to: localhost
+
+    - name: create app.ini
+      ansible.builtin.template:
+        src: "{{ src_file}}"
+        dest: "{{ dest_file}}"
+      when: file_exists.stat.exists
+
+    - name: Read content of the file {{ dest_file }}
+      ansible.builtin.slurp:
+        path: "{{ dest_file}}"
+      register: file_content
+
+    - name: Display content of {{dest_file }}
+      ansible.builtin.debug:
+        msg: "{{ file_content['content'] | b64decode }}"
+        
+...
