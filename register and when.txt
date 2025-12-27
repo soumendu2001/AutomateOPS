@@ -1,0 +1,450 @@
+hello and welcome to my channel AutomateOps!
+
+“Ever wondered how to capture live command output and make decisions on the fly? Today, we’ll learn two powerful Ansible features—register and when—that make automation dynamic and smart.”
+
+
+1) Displaying FQDN with register
+
+
+---
+- name: Register Demo
+  hosts: all
+  tasks:
+    - name: Explore FQDN
+      ansible.builtin.command: hostname -A
+      register: hostname_register
+    - name: Displaing FQDN 
+      ansible.builtin.debug:
+        msg: "FQDN of {{ ansible_hostname }} is {{ hostname_register.stdout}}"
+...
+
+[Hook | 0:00–0:15]
+(Soft ambient bed)
+“Want to capture live output and use it inside your playbook? Today we’ll do exactly that—register the full host name and print it with a clean message.”
+[Setup | 0:15–0:40]
+“We’re running hostname -A to fetch the FQDNs, storing the result in a variable called hostname_register. Then, we’ll display it using debug.”
+[Line-by-line | 0:40–1:40]
+(Zoom on register: hostname_register)
+“Every command can return structured data—stdout, exit code, the works.
+We capture it… and then we use it.”
+(Zoom on {{ hostname_register.stdout }})
+“Here, stdout is the exact string the command returns.”
+[Run & Observe | 1:40–2:10]
+“Let’s execute.” (Run playbook)
+“You should see: ‘FQDN of Target1 is …’ Nice and predictable.”
+[Pro Tip | 2:10–2:30]
+“If your distro prefers a single FQDN, use hostname -f.
+If you want all names, -A is fine.”
+[Recap | 2:30–2:45]
+“You just learned how to register command output and inject it into messages—super handy for diagnostics and logs.”
+
+
+
+2.When: Displaying IP address of Ubuntu Servers:
+
+---
+- name: Demo of when
+  hosts: all
+  tasks:
+    - name: Exploring FQDN when using conditional arguments
+      ansible.builtin.command: hostname -I
+      register: hostname_info
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Displaying FQDN of Ubuntu Servers
+      ansible.builtin.debug:
+        var: hostname_info.stdout
+      when: ansible_distribution == 'Ubuntu' and hostname_info.changed
+...
+
+🎙️ Voiceover Script
+[Hook | 0:00–0:12]
+“Conditionals make automation smart. Let’s print IP addresses only on Ubuntu servers.”
+[Explain | 0:12–0:45]
+“We run hostname -I, store the output, and display it—
+but only when the OS is Ubuntu.”
+(On screen: highlight when: ansible_distribution == 'Ubuntu')
+[Fix & Run | 0:45–1:40]
+“Quick syntax check: when combining conditions, make sure you use AND correctly.”
+YAMLwhen: ansible_distribution == 'Ubuntu' and hostname_info.changedShow more lines
+“Now let’s run it.” (Run playbook)
+“You’ll see a clean variable dump with the IPs on Ubuntu, and no noise elsewhere.”
+[Recap | 1:40–2:00]
+“That’s the power of when: filter actions to only where they matter.”
+
+
+
+
+3.Displaying Server Info ( when Linux):
+
+---
+- name: Get number of CPU. Memory and OS information for the hosts
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Summarize host information for Linux Server
+      ansible.builtin.debug:
+         msg: | 
+           #--------------------------#
+           ###### HOST INFORMATION######
+           "Nodename: {{ ansible_nodename}},\n"
+           "User Name: {{ ansible_user_id}},"
+           "OS : {{ ansible_os_family}}, Distribution: {{ ansible_distribution}}"
+           "Number of vCPU: {{ansible_processor_vcpus}},"
+           "---------------------------------------------------------------"
+           "Total Memory: {{ansible_memtotal_mb}} MB,"
+           "Free Memory(Real): {{ansible_memory_mb.real.free }} MB,"
+           "Free Memory(nocache): {{ansible_memory_mb.nocache.free}} MB,"
+           "IPV4 Address: {{ansible_default_ipv4.address}}"  
+           "IPV6 Address: {{ ansible_ens5.ipv6[0]['address'] }},"
+           "Shell Information: {{ ansible_env.SHELL }},"
+           "Home Directory: {{ ansible_env.HOME }}"
+           "-----------------END-------------------"
+           #------------------------------------#
+      when: 
+        - ansible_distribution == 'Amazon'
+        - ansible_distribution_major_version | int >= 2023
+...
+
+🎙️ Voiceover Script
+[Hook | 0:00–0:15]
+“Want a one-shot summary of your host—CPU, memory, OS, and network? Let’s print it beautifully.”
+[Explain | 0:15–0:50]
+“We’re using facts collected by Ansible to build a multi-line status card—restricted to Amazon Linux 2023 or newer.”
+(Zoom on when: block)
+“Conditional targeting keeps the output relevant.”
+[Run | 0:50–1:30]
+“Run the play—watch the formatted block pour in:
+nodename, user, distro, vCPUs, memory stats, IPs, shell, home—everything in one place.”
+[Pro Tip | 1:30–1:55]
+“If your NIC isn’t ens5, use ansible_default_ipv4.address to avoid interface-name surprises.”
+[Recap | 1:55–2:10]
+“You now have a clean system profile for Amazon Linux hosts—great for audits and baseline checks.”
+
+4) Install & (Re)Start Services Condition‑ally (Ubuntu vs Amazon Linux)
+
+For Ubuntu Servers (Target2)
+stop service
+sudo systemctl status
+sudo systemctl stop apache2
+
+for Linux Servers:
+stop httpd service
+sudo systemctl status
+sudo systemctl stop httpd
+
+---
+- name: Exploring when keyword
+  hosts: target
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Install Apache2 on Ubuntu Servers
+      ansible.builtin.apt:
+        name: apache2
+        state: present
+        update_cache: true
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Install httpd on Linux Server
+      ansible.builtin.yum:
+        name: httpd
+        state: present
+      when: ansible_distribution == 'Amazon'
+
+    - name: Gather Service Facts
+      ansible.builtin.service_facts:
+
+    - name:  Restart httpd service if stopped (Linux)
+      ansible.builtin.service:
+        name: httpd
+        state: restarted
+        enabled: true
+      when:  ansible_distribution == 'Amazon' and ansible_facts.services['httpd.service'] is defined and ansible_facts.services['httpd.service'].state in['stopped','inactive']
+      notify: "httpd restarted"
+
+    - name: Restart apache2  service if stopped (Ubuntu)
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
+        enabled: true
+      when: ansible_distribution == 'Ubuntu' and ansible_facts.services[ 'apache2.service'] is defined and ansible_facts.services[ 'apache2.service' ].state  in ['stopped' , 'inactive']
+      notify: "apache2 restarted"
+
+  handlers:
+    - name: apache2 restarted
+      listen: "apache2 restarted"
+      ansible.builtin.debug:
+           msg: "Apache2 service restarted"
+    - name: httpd restarted
+      listen: "httpd restarted"
+      ansible.builtin.debug:
+           msg: "httpd service restarted"
+...
+
+[Hook | 0:00–0:20]
+“Different OS, same outcome—get the right web server installed and only restart if it’s actually down.”
+[Explain | 0:20–0:55]
+“We install apache2 on Ubuntu, httpd on Amazon Linux.
+Then we collect service facts and make a conditional restart based on current state.”
+(Zoom on service_facts → ansible_facts['services'])
+[Run | 0:55–1:40]
+“Execute the playbook. If the service is stopped or inactive, we restart and enable it.
+Handlers confirm with a nice log message.”
+[Pro Tip | 1:40–2:05]
+“In production, consider a graceful stop and health checks before restarts.”
+[Recap | 2:05–2:20]
+“You’ve just built a cross-distro service manager with smart restarts.”
+
+Create 2 python scripts:
+
+show_service_disabled_and_inactive.sh 
+=======================================================
+#!/bin/sh
+set -eu
+
+# Print header
+printf "%-60s %-12s %-12s\n" "SERVICE" "ENABLED" "ACTIVE"
+
+# List services and evaluate enable/active state
+systemctl list-unit-files --type=service --no-legend --no-pager \
+| awk '{print $1}' \
+| while read -r svc; do
+  en="$(systemctl is-enabled "$svc" 2>/dev/null || echo "unknown")"
+  ac="$(systemctl is-active  "$svc" 2>/dev/null || echo "unknown")"
+  if [ "$en" = "disabled" ] && [ "$ac" = "inactive" ]; then
+    printf "%-60s %-12s %-12s\n" "$svc" "$en" "$ac"
+  fi
+done | column -t
+=======================================================
+
+
+show_service_disabled_or_inactive.sh 
+=====================================
+#!/bin/sh
+set -eu
+
+printf "%-60s %-12s %-12s\n" "SERVICE" "ENABLED" "ACTIVE"
+
+{
+  # All disabled services from unit-files view
+  systemctl list-unit-files --type=service --no-legend --no-pager \
+  | awk '$2=="disabled"{print $1}'
+
+  # All inactive services from units view
+  systemctl list-units --type=service --state=inactive --no-legend --no-pager \
+  | awk '{print $1}'
+} | sort -u \
+| while IFS= read -r svc; do
+    en="$(systemctl is-enabled "$svc" 2>/dev/null || echo "unknown")"
+    ac="$(systemctl is-active  "$svc" 2>/dev/null || echo "unknown")"
+    printf "%-60s %-12s %-12s\n" "$svc" "$en" "$ac"
+  done | column -t
+
+=====================================
+
+touch service_disabled_and_inactive.yaml (Test5.yaml)
+
+==========================================
+
+---
+- name: Display Services which are disabled and Inactive (both)
+  hosts: target
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Copy script (LF line endings, executable)
+      ansible.builtin.copy:
+        src: "./show_service_disabled_and_inactive.sh"
+        dest: "/etc/show_service_disabled_and_inactive.sh"
+        mode: '0755'
+
+    # Optional: convert if your control-node file still has CRLF
+    - name: Ensure Unix LF endings (if needed)
+      ansible.builtin.shell: "sed -i 's/\\r$//' /etc/show_service_disabled_and_inactive.sh"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Run report (read-only)
+      ansible.builtin.command: "/etc/show_service_disabled_and_inactive.sh"
+      register: report
+      changed_when: false
+
+    - name: Display Report
+      ansible.builtin.debug:
+        msg: "{{ report.stdout }}"
+...
+
+
+
+=============================================
+
+touch service_disabled_or_inactive.yaml (Test6.yaml)
+=====================================================
+
+
+---
+- name: Display Services which are disabled OR inactive
+  hosts: target
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Copy script to /etc
+      ansible.builtin.copy:
+        src: "./show_service_disabled_or_inactive.sh"
+        dest: "/etc/show_service_disabled_or_inactive.sh"
+        mode: '0755'
+
+    - name: Sanitize any HTML entities (defense-in-depth)
+      ansible.builtin.shell: |
+        sed -i 's/&gt;/>/g'  /etc/show_service_disabled_or_inactive.sh
+        sed -i 's/&amp;/\&/g' /etc/show_service_disabled_or_inactive.sh
+      args:
+        executable: /bin/sh
+      changed_when: true
+
+    - name: Strip CR characters (enforce LF endings)
+      ansible.builtin.shell: "sed -i 's/\\r$//' /etc/show_service_disabled_or_inactive.sh"
+      args:
+        executable: /bin/sh
+      changed_when: true
+
+    - name: Run via bash explicitly (read-only)
+      ansible.builtin.command: "bash /etc/show_service_disabled_or_inactive.sh"
+      register: report
+      changed_when: false
+
+    - name: Display Report
+      ansible.builtin.debug:
+        msg: "{{ report.stdout }}"
+...
+
+=================================================================
+
+
+6) Restart all stopped services
+
+Let' see the services
+
+---
+- name: Demo to restart all stopped services
+  hosts: target
+  become: yes
+
+  tasks:
+    - name: Collect all Services
+      ansible.builtin.service_facts:
+
+    - name: Display all stopped services (safe across distros)
+      ansible.builtin.debug:
+        msg: "Name: {{ item.key }}, state: {{ item.value.state | default('unknown') }}, status: {{ item.value.status | default('unknown') }}"
+      loop: "{{ ansible_facts.services | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when:
+        - (item.value.state | default( 'unknown')) in ['stopped', 'inactive']
+
+    - name: Restart and enable all stopped or inactive services (with guards)
+      ansible.builtin.service:
+        name: "{{ item.key }}"
+        state: restarted
+        enabled: true
+      loop: "{{ ansible_facts.services | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when:
+        - (item.value.state  | default( 'unknown')) in ['stopped', 'inactive']
+        - (item.value.status | default( 'unknown')) not in [
+            'static','not-found','indirect','inactive','alias','failed',
+            'masked','generated','transient','enabled-runtime','active'
+          ]
+        - not (item.key is match( '@'))  # skip template/instance units
+...'
+
+🎙️ Voiceover Script
+[Hook | 0:00–0:15]
+“What if you could scan all services and bring back anything that’s down—automatically?”
+[Explain | 0:15–0:55]
+“We gather facts, filter by state, and restart only those that should be managed.
+We avoid static, indirect, masked, and template services.”
+(Zoom on not item.key is match('@'))
+“Template units (with @) are skipped—good hygiene.”
+[Run | 0:55–1:40]
+“Execute. First you’ll see a report of stopped services, then targeted restarts.
+Enabled = true ensures they survive reboots.”
+[Recap | 1:40–2:00]
+“That’s automated recovery—with guardrails.”
+
+
+
+7) Check if /tmp exists; create if missing
+---
+- name: Check if /tmp exists
+  hosts: target
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: Check if /tmp exists
+      ansible.builtin.stat:
+        path: /tmp
+      register: tmp_exists
+
+    - name: Confirming if /tmp exists
+      ansible.builtin.debug:
+        msg: |
+         {% if tmp_exists.stat.exists %}
+           /tmp exists
+         {% else %}
+           / tmp does not exists
+         {% endif %}
+    - name: Create /tmp if it does not exists 
+      ansible.builtin.file:
+        state: directory
+        path: /tmp
+      when: not tmp_exists.stat.exists
+...
+
+
+🎙️ Voiceover Script
+[Hook | 0:00–0:12]
+“Let’s check a path safely—and create it only if it’s missing.”
+[Explain | 0:12–0:40]
+“We use stat to inspect /tmp, log a message, and conditionally create the directory.”
+
+
+
+8) Install httpd on Linux only (by OS release)
+
+---
+- name: GET OS info for target servers and install httpd for Linux only
+  hosts: target
+  become: yes
+  tasks:
+    - name: Check OS version
+      ansible.builtin.command: cat /etc/os-release
+      register: os_info
+
+    - name: Install httpd in Linux
+      ansible.builtin.yum:
+        name: httpd
+        state: present
+      when: "'Amazon' in os_info.stdout"
+...
+
+🎙️ Voiceover Script
+[Hook | 0:00–0:12]
+“No facts? No problem. Let’s parse /etc/os-release and branch on Amazon Linux.”
+[Explain | 0:12–0:45]
+“Even without gather_facts, you can inspect the OS, find ‘Amazon’, and install httpd with yum.”
+[Run | 0:45–1:20]
+“Run it—Amazon hosts get httpd, others skip gracefully.
+Idempotence means repeat runs are safe.”
+[Recap | 1:20–1:35]
+“A simple pattern for fact‑less environments.”
+
+
+
+“If this helped, hit subscribe and comment ‘next: tags & loops’—I’ll prioritize that episode.”
