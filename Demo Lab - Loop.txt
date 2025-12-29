@@ -1,0 +1,305 @@
+Loop (Part1)
+
+Modifying MOTD
+
+========================================================================
+
+with_item
+
+1. Modify motd
+
+---
+- name: Modify Motd
+  hosts: target
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: Modify Motd
+      ansible.builtin.copy:
+        dest: /etc/motd
+        content: "Welcome to {{ item }}"
+      with_items:
+           - Amazon
+           - Ubuntu
+      when: ansible_distribution == item
+
+    - name: Collect motd
+      ansible.builtin.slurp:
+        path: /etc/motd
+      register: motd_content
+
+    - name: Display motd
+      ansible.builtin.debug:
+        msg: "{{ motd_content['content'] | b64decode }}"           
+...
+
+========================================================================
+
+Verify Existing users:
+Type:
+ssh ec2-user@<ip> tail -5 /etc/passwd
+
+Playbook to create Users
+
+
+========================================================================
+---
+- name: Create user
+  hosts: target
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: Create user
+      ansible.builtin.user:
+          name: "{{ item }}"
+      with_items:
+           - A
+           - B
+           - C
+           - D
+...
+========================================================================
+
+Verify Users:  ssh ec2-user@<ip> tail -5 /etc/passwd
+
+
+========================================================================     
+3. Installation of multiple packages using loop
+---
+- name: Install multiple packages
+  hosts: target
+  become: yes
+  tasks:
+    - name: Install multiple packages (Linux)
+      ansible.builtin.yum:
+           name: "{{ item}}" 
+           state: present 
+      loop: 
+        - httpd
+        - vim
+        - yamllint
+      when: ansible_distribution == 'Amazon'
+
+    - name: Install multiple packages (Ubuntu)
+      ansible.builtin.apt:
+            name: "{{ item}}"
+            state: present
+       loop:
+          - apache2
+          - vim
+          - yammlint
+
+...
+========================================================================
+========================================================================
+4. with_dict 
+
+with_dict is legacy. The recommended modern pattern is loop: "{{ mydict | dict2items }}". I’ll show both so your learners understand old playbooks and write new ones correctly.
+
+---
+- name: Demo with_dict - print key/value
+  hosts: target
+  gather_facts: false
+  vars:
+    app_config:
+        app_name: "test-api"
+        port: 8080
+        debug: true
+  tasks:
+     - name: Show each config item
+       ansible.builtin.debug:
+         msg: "Key: {{ item.key}}, Value: {{ item.value}}"
+       with_dict: "{{ app_config }}"
+...
+========================================================================
+alternate option using loop:
+========================================================================
+---
+- name: Demo with_dict - print key/value
+  hosts: target
+  gather_facts: false
+  vars:
+    app_config:
+        app_name: "test-api"
+        port: 8080
+        debug: true
+  tasks:
+     - name: Show each config item
+       ansible.builtin.debug:
+         msg: "Key: {{ item.key }}, Value: {{ item.value }}"
+       loop: "{{ app_config | dict2items }}"
+...
+========================================================================
+Create file named users.yaml as below:
+========================================================================
+
+users:
+  alice:
+    uid: 1101
+    shell: /bin/bash
+  bob:
+    uid: 1103
+    shell: /bin/zsh
+
+  carol:
+    uid: 1104
+
+ssh ec2-user@<ip> tail -5 /etc/passwd  
+========================================================================
+
+Create below code for with_dict
+========================================================================
+---
+- name: Create users ( using with_dict)
+  hosts: target
+  become: yes
+  vars_files:
+     - users.yaml
+  tasks:
+    - name: Ensure Users exists
+      ansible.builtin.user:
+         name: "{{ item.key }}"
+         shell: "{{ item.value.shell }}"
+       with_dict: users
+      
+         
+...
+
+========================================================================
+
+Create below code using loop
+========================================================================
+---
+- name: Create users ( using with_dict)
+  hosts: target
+  become: yes
+  vars_files:
+     - users.yaml
+  tasks:
+    - name: Ensure Users exists
+      ansible.builtin.user:
+         name: "{{ item.key }}"
+         shell: "{{ item.value.shell }}"
+       loop: "{{ users | dict2items }}"
+...
+========================================================================
+verify: id alice
+
+
+Uninstall packages:
+
+===================================================
+Create package.yaml as below:
+
+packages:
+ apache2: present
+ redis: present
+ redis-server: present
+ mysql-server: present
+ httpd: present
+ 
+==================================================
+
+
+Managing Package
+---
+- name: Package Management using dict2items
+  hosts: target
+  vars_files:
+     - packages.yaml
+  become: yes
+  tasks:
+    - name: Install packages
+      ansible.builtin.package:
+         name: "{{ item.key }}"
+         state: "{{ item.value}}"
+      loop: "{{ packages | dict2items }}"
+...
+=======================================================================
+
+Verify Existing user before running code:
+========================================================================
+
+tail -11 /etc/passwd
+========================================================================
+with_sequence:
+
+---
+- name: Create users user01..user10
+  hosts: all
+  become: true
+  tasks:
+    - name: Ensure users exist (user01..user10)
+      user:
+        name: "user{{ item }}"
+        state: present
+      with_sequence: start=1 end=10 format=%02d
+...
+
+Verify: tail -11 /etc/passwd if new users are existing or not.
+
+========================================================================
+with_random_choice:
+
+Random SSH banner quote (per session variety)
+
+- name: Random SSH banner quote
+  hosts: linux
+  become: true
+  vars:
+    quotes:
+      - "Automation is the future."
+      - "Trust but verify."
+      - "Ship small, ship often."
+      - "Measure twice, deploy once."
+  tasks:
+    - name: Pick a quote
+      set_fact:
+        login_quote: "{{ item }}"
+      with_random_choice: "{{ quotes }}"
+
+    - name: Configure issue.net
+      ansible.builtin.copy:
+        dest: /etc/issue.net
+        content: "Authorized access only.\n{{ login_quote }}\n"
+
+    - name: Ensure SSH shows banners
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^Banner'
+        line: 'Banner /etc/issue.net'
+      notify: Restart SSH
+
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
+...
+
+========================================================================
+
+Random maintenance window message (fun, low‑risk)
+---
+
+- name: Show a random maintenance window banner
+  hosts: all
+  become: true
+  vars:
+    banners:
+      - "Maintenance window starts at 01:00 UTC."
+      - "Heads up: Patch night tonight 23:00 local."
+      - "Reminder: Rolling updates over the weekend."
+  tasks:
+    - name: Pick banner
+      set_fact:
+        motd_banner: "{{ item }}"
+      with_random_choice: "{{ banners }}"
+
+    - name: Write /etc/motd
+      ansible.builtin.copy:
+        dest: /etc/motd
+        content: "Welcome!\n{{ motd_banner }}\n"
+
+...
+========================================================================
