@@ -1,0 +1,330 @@
+type tree 
+
+ansible-product-labs/
+├─ inventory.ini
+├─ group_vars/
+│  └─ all.yaml
+├─ playbooks/
+│  ├─ 01_product_two_lists.yaml
+│  ├─ 02_product_three_lists.yaml
+│  ├─ 03_product_app_env_dirs.yaml
+│  ├─ 04_product_users_groups.yaml
+│  ├─ 05_product_conditional_filter.yaml
+│  └─ 06_nested_vs_product.yaml
+└─ templates/
+   └─ README.txt
+
+
+group_vars/all.yaml
+
+
+# Shared demo variables used by multiple labs
+colors: [red, blue]
+sizes: [small, medium]
+styles: [casual, formal]
+
+apps:
+  - inventory-api
+  - payment-gateway
+envs:
+  - dev
+  - prod
+
+users: [alice, bob]
+user_groups: [devs, ops]
+
+dns_suffix: "corp.local"
+
+# You can override these per play as needed
+
+
+Lab 1 — Product of Two Lists (complete)
+
+Create 01_product_two_lists.yaml
+
+---
+- name: Lab 1 - Product of two lists (colors × sizes)
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Show all color-size combinations (modern product)
+      ansible.builtin.debug:
+        msg: "Color={{ item.0 }} Size={{ item.1 }}"
+      loop: "{{ colors | product(sizes) | list }}"
+
+    # Legacy equivalent using with_nested (for teaching)
+    - name: Show all color-size combinations (legacy with_nested)
+      ansible.builtin.debug:
+        msg: "Color={{ item.0 }} Size={{ item.1 }}"
+      with_nested:
+        - "{{ colors }}"
+        - "{{ sizes }}"
+...
+
+
+Run:
+ansible-playbook -i inventory.ini playbooks/01_product_two_lists.yaml
+
+
+2.Lab 2 — Product of Three Lists (proper flattening)
+File: playbooks/02_product_three_lists.yaml
+
+========================
+---
+- name: Lab 2 - Product of three lists (colors × sizes × styles)
+  hosts: all
+  gather_facts: false
+
+  vars:
+    combos: >-
+      {{
+        colors | product(sizes) | product(styles)
+        | map('flatten') | list
+      }}
+
+  tasks:
+    - name: Show all combinations with flatten
+      ansible.builtin.debug:
+        msg: "Color={{ item.0 }} Size={{ item.1 }} Style={{ item.2 }}"
+      loop: "{{ combos }}"
+
+    # Legacy equivalent
+    - name: Show all combinations (legacy with_nested on three lists)
+      ansible.builtin.debug:
+        msg: "Color={{ item.0 }} Size={{ item.1 }} Style={{ item.2 }}"
+      with_nested:
+        - "{{ colors }}"
+        - "{{ sizes }}"
+        - "{{ styles }}"
+...
+
+========================
+
+
+Example without flatten :
+
+===========================================
+
+
+---
+- name: Lab 2 - Product of three lists (no flatten)
+  hosts: target
+  gather_facts: false
+
+  vars:
+    combos_nested: >-
+      {{
+        colors | product(sizes) | product(styles) | list
+      }}
+
+  tasks:
+    - name: Show all combinations (nested indexing)
+      ansible.builtin.debug:
+        msg: "Color={{ item.0.0 }} Size={{ item.0.1 }} Style={{ item.1 }}"
+      loop: "{{ combos_nested }}"
+
+
+===========================================
+
+Lab 3 — Create app × env directories (complete, idempotent)
+
+before creation, check the tree status of /opt
+
+tree -af /opt
+
+File: playbooks/03_product_app_env_dirs.yaml
+
+---
+- name: Lab 3 - Create app/env directories (apps × envs)
+  hosts: target
+  become: yes
+  gather_facts: false
+
+  tasks:
+    - name: Create directories for each app/env combination
+      ansible.builtin.file:
+        path: "/opt/{{ item.0 }}/{{ item.1 }}"
+        state: directory
+        mode: '0755'
+      loop: "{{ apps | product(envs) | list }}"
+
+    - name: Drop marker file to indicate management
+      ansible.builtin.copy:
+        dest: "/opt/{{ item.0 }}/{{ item.1 }}/.managed_by_ansible"
+        content: "app={{ item.0 }} env={{ item.1 }}\n"
+        mode: '0644'
+      loop: "{{ apps | product(envs) | list }}"
+...
+
+Run:
+ls -R /opt/inventory-api /opt/payment-gateway
+
+
+
+Lab 4 — Add Users to Multiple Groups (complete)
+File: playbooks/04_product_users_groups.yaml
+
+---
+- name: Lab 4 - Add each user to each group
+  hosts: all
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: Collect List of users
+      ansible.builtin.command: "tail -10 /etc/passwd"
+      register: user_list
+    - name: Display list of users
+      ansible.builtin.debug:
+        msg: "{{user_list.stdout }}"
+    - name: Ensure users exist first (idempotent)
+      ansible.builtin.user:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ users }}"
+    - name: Ensure groups exists ( idempotent)
+      ansible.builtin.group:
+        name: "{{ item}}"
+        state: present
+      loop: "{{ user_groups }}"
+
+    - name: Add user to group combinations (modern product)
+      ansible.builtin.user:
+        name: "{{ item.0 }}"
+        groups: "{{ item.1 }}"
+        append: yes
+      loop: "{{ users | product(user_groups) | list }}"
+
+    # Optional legacy teaching task
+    - name: Add user to group combinations (legacy with_nested)
+      ansible.builtin.user:
+        name: "{{ item.0 }}"
+        groups: "{{ item.1 }}"
+        append: yes
+      with_nested:
+        - "{{ users }}"
+        - "{{ user_groups }}"
+
+    - name: Collect current user list
+      ansible.builtin.command: " tail -10 /etc/passwd"
+      register: user_list
+    - name: Display User list
+      ansible.builtin.debug:
+        msg: "{{ user_list.stdout }}"
+...
+
+Lab 5 — Conditional Filtering with when (complete)
+
+File: playbooks/05_product_conditional_filter.yaml
+
+
+---
+- name: Lab 5 - Conditional filtering on product tuples
+  hosts: linux
+  gather_facts: false
+
+  vars:
+    list1: [a, b, c]
+    list2: [a, b, c]
+
+  tasks:
+    - name: Show only pairs with different elements
+      ansible.builtin.debug:
+        msg: "Pair={{ item.0 }}-{{ item.1 }}"
+      loop: "{{ list1 | product(list2) | list }}"
+      when: item.0 != item.1
+
+    - name: Skip pairs where element equals 'b'
+      ansible.builtin.debug:
+        msg: "Pair={{ item.0 }}-{{ item.1 }}"
+      loop: "{{ list1 | product(list2) | list }}"
+      when:
+        - item.0 != item.1
+        - item.0 != 'b'
+        - item.1 != 'b'
+...
+
+Lab 6 — Legacy with_nested vs Modern product (side‑by‑side)
+
+File: playbooks/06_nested_vs_product.yaml\
+
+---
+- name: Lab 6 - Compare legacy with_nested to modern product
+  hosts: target
+  gather_facts: false
+
+  vars:
+    left:  [L1, L2]
+    right: [R1, R2]
+
+  tasks:
+    - name: Legacy - with_nested iteration
+      ansible.builtin.debug:
+        msg: "Legacy tuple: {{ item.0 }} , {{ item.1 }}"
+      with_nested:
+        - "{{ left }}"
+        - "{{ right }}"
+
+    - name: Modern - product iteration
+      ansible.builtin.debug:
+        msg: "Modern tuple: {{ item.0 }} , {{ item.1 }}"
+      loop: "{{ left | product(right) | list }}"
+...
+
+
+Lab 6 — Legacy with_nested vs Modern product (side‑by‑side)
+File: playbooks/06_nested_vs_product.yaml
+
+---
+- name: Lab 6 - Compare legacy with_nested to modern product
+  hosts: linux
+  gather_facts: false
+
+  vars:
+    left:  [L1, L2]
+    right: [R1, R2]
+
+  tasks:
+    - name: Legacy - with_nested iteration
+      ansible.builtin.debug:
+        msg: "Legacy tuple: {{ item.0 }} , {{ item.1 }}"
+      with_nested:
+        - "{{ left }}"
+        - "{{ right }}"
+
+    - name: Modern - product iteration
+      ansible.builtin.debug:
+        msg: "Modern tuple: {{ item.0 }} , {{ item.1 }}"
+      loop: "{{ left | product(right) | list }}"
+...
+
+Bonus: Product with Three Lists (Flattening + Condition)
+Here’s a correct triple product example with flattening and conditional selection by environment:
+
+
+---
+- name: Bonus - Triple product with flattening and env filter
+  hosts: target
+  gather_facts: false
+
+  vars:
+    users: [alice, bob]
+    groups: [devs, ops]
+    environments: [qa, prod]
+    active_env: "qa"
+
+    combos: >-
+      {{
+        (users | product(groups) | product(environments))
+        | map('flatten') | list
+      }}
+
+  tasks:
+    - name: Act only on active env
+      ansible.builtin.debug:
+        msg: "User={{ item.0 }} Group={{ item.1 }} Env={{ item.2 }}"
+      loop: "{{ combos }}"
+      when: item.2 == active_env
+...
+
+
