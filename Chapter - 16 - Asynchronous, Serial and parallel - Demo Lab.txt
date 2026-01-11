@@ -1,0 +1,300 @@
+install Tree 
+
+sudo apt install tree -y
+
+-----------------------------------------------
+
+Folder layout
+
+
+ansible-execution-strategies/
+├── ansible.cfg
+├── hosts
+├── 01_parallel_default.yaml
+├── 02_parallel_tuned_forks.yaml
+├── 03_serial_batches.yaml
+├── 04_serial_percentages.yaml
+├── 05_async_polling.yaml
+├── 06_async_fire_and_forget.yaml
+├── 07_async_with_status_check.yaml
+├── 08_strategy_free_vs_linear.yaml
+
+
+
+Run:
+
+Tree
+
+
+ansible.cfg
+
+[defaults]
+# Default parallelism (we'll tune this in a separate lab)
+forks = 5           
+host_key_checking = False
+timeout = 30
+deprecation_warnings = False
+inventory = hosts
+
+Check by below:
+
+ansible-config dump | grep -i forks
+ansible --version
+
+
+hosts
+
+
+[all]
+Target1 ansible_host=10.0.0.11 ansible_user=ubuntu
+Target2 ansible_host=10.0.0.12 ansible_user=ubuntu
+Control ansible_host=10.0.0.13 ansible_user=ubuntu
+
+
+
+1) Parallel (default linear strategy with forks=5) file name: 01_parallel_default.yaml
+
+By default, Ansible runs tasks in parallel, controlled by forks. Watch how three hosts finish a 5‑second task together—fast, efficient
+---
+- name: Parallel execution (default linear strategy)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Sleep for 5 seconds on all hosts (runs in parallel across up to 5 hosts by default)
+      ansible.builtin.command: /bin/sleep 5
+...
+
+Run:
+time ansible-playbook 01_parallel_default.yaml -v
+
+
+
+2) Parallel (tuning forks to increase concurrency)
+
+If five forks are too few for your fleet, bump them—carefully. More forks mean more concurrency; just don’t overwhelm your control node.
+
+
+02_parallel_tuned_forks.yaml
+
+
+---
+- name: Parallel execution with tuned forks
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Sleep for 5 seconds to show effect of forks
+      ansible.builtin.command: /bin/sleep 5
+
+...
+
+Option A (temporary): override forks on CLI:
+time ansible-playbook 02_parallel_tuned_forks.yaml --forks 6 -v
+
+Option B (persistent): set forks = 6 in ansible.cfg, then:
+time ansible-playbook 02_parallel_tuned_forks.yaml -v
+
+
+3) Serial (fixed batch size)
+
+Rolling updates: with serial, we limit blast radius. Two at a time keeps the service stable while we move through the fleet
+
+03_serial_batches.yaml
+
+
+---
+- name: Rolling updates in fixed batches
+  hosts: all
+  gather_facts: false
+  serial: 2        # two hosts at a time
+  tasks:
+    - name: Simulate quick work
+      ansible.builtin.command: /bin/sleep 1
+...
+
+Run:
+
+time ansible-playbook 03_serial_batches.yaml -v
+
+4) 04_serial_percentages.yaml
+
+
+---
+- name: Progressive rolling batches with counts and percentages
+  hosts: all
+  gather_facts: false
+
+  # First 1 host, then 2, then 3; or use percentages for large groups
+  # Uncomment ONE of the serial blocks below:
+
+  # serial:
+  #   - 1
+  #   - 2
+  #   - 3
+
+  serial:
+    - 16%
+    - 34%
+    - 50%
+
+  tasks:
+    - name: Simulate quick work
+      ansible.builtin.command: /bin/sleep 1
+...
+
+Run:
+
+time ansible-playbook 04_serial_percentages.yaml -v
+
+5) Async + polling (non‑blocking long tasks)
+
+Long tasks shouldn’t block playbooks. Async with a small poll lets us monitor progress without holding the line open.
+
+05_async_polling.yaml
+
+
+---
+- name: Async long-running tasks (with polling)
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Task on Target1
+      ansible.builtin.command: /bin/sleep 5
+      when: ansible_hostname == 'Target1'
+      async: 10   # allow up to 10s runtime
+      poll: 1     # check status every 1s
+
+    - name: Task on Target2
+      ansible.builtin.command: /bin/sleep 5
+      when: ansible_hostname == 'Target2'
+      async: 10
+      poll: 1
+
+    - name: Task on Control
+      ansible.builtin.command: /bin/sleep 5
+      when: ansible_hostname == 'Control'
+      async: 10
+      poll: 1
+...
+
+Run:
+time ansible-playbook 05_async_polling.yaml -v
+
+
+Teaching note: Async lets tasks run in the background while the play continues; poll: 1 keeps SSH sessions short but still tracks status.”
+
+6) Async fire‑and‑forget” (no polling)
+
+
+06_async_fire_and_forget.yaml
+
+
+---
+- name: Async fire-and-forget demo
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Task1 (no polling)
+      ansible.builtin.command: /bin/sleep 5
+      when: ansible_hostname == 'Target1'
+      async: 10
+      poll: 0
+      register: result1
+
+    - name: Task2 (no polling)
+      ansible.builtin.command: /bin/sleep 5
+      when: ansible_hostname == 'Target2'
+      async: 10
+      poll: 0
+      register: result2
+
+    - name: Task3 (longer, no polling)
+      ansible.builtin.command: /bin/sleep 30
+      when: ansible_hostname == 'Control'
+      async: 60
+      poll: 0
+      register: result3
+
+    - name: Show returned async job stubs
+      ansible.builtin.debug:
+        msg:
+          - Target1: "{{ result1 }}"
+          - Target2: "{{ result2 }}"
+          - Control: "{{ result3 }}"
+...
+
+
+Run:
+time ansible-playbook 06_async_fire_and_forget.yaml -v
+
+
+7) Async + explicit async_status (collecting results later)
+
+We can still retrieve results later using the ansible_job_id with async_status. Reliable and scalable.
+
+07_async_with_status_check.yaml
+
+---
+- name: Async with explicit status collection
+  hosts: all
+  gather_facts: true
+  vars:
+    command_30: '/bin/sleep 30'
+    command_5: '/bin/sleep 5'
+    cmd: "{{ command_30 if ansible_hostname == 'Target1' else command_5 }}"
+  tasks:
+    - name: Start async job
+      ansible.builtin.command: "{{ cmd }}"
+      async: 60
+      poll: 0
+      register: async_result
+
+    - name: Show async job id
+      ansible.builtin.debug:
+        msg: "ansible_job_id: {{ async_result.ansible_job_id }}"
+
+    - name: Poll until job finishes
+      ansible.builtin.async_status:
+        jid: "{{ async_result.ansible_job_id }}"
+      register: job_status
+      until: job_status.finished
+      retries: 60
+      delay: 1
+
+    - name: Display final results per host
+      ansible.builtin.debug:
+        var: job_status
+...
+
+Run:
+
+time ansible-playbook 07_async_with_status_check.yaml -v
+
+
+
+8) Strategy: free vs linear (with random durations)
+
+Strategy matters. free lets fast hosts sprint ahead; linear keeps everyone in step. Choose based on task characteristics.
+
+08_strategy_free_vs_linear.yaml
+
+
+---
+- name: Free strategy vs linear (random sleeps)
+  hosts: all
+  gather_facts: false
+
+  # Try commenting/uncommenting the next line to contrast behaviors:
+  strategy: free
+
+  tasks:
+    - name: Sleep randomly (0..9 seconds)
+      ansible.builtin.command: /bin/sleep {{ 10 | random }}
+...
+
+Run (linear vs free):
+
+
+time ansible-playbook 08_strategy_free_vs_linear.yml -v    # with 'strategy: free'
+# Then comment out strategy: free and re-run to observe linear behavior
+
+
