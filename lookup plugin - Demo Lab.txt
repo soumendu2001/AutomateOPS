@@ -1,0 +1,265 @@
+
+============================
+
+3. mkdir Templates && touch  Templates/snippet.j2
+settings:
+   app_name: AutomateOps
+   region: ap_south-1
+   replicas:3
+
+# Simple INI-like settings
+{% for k, v in settings.items() %}
+{{ k }}={{ v }}
+{% endfor %}
+
+
+
+===========================
+
+mkdir files && touch files/list.txt
+
+- name: Read multiple lines from files
+  vars:
+    lines: "{{ query('file', 'files/list.txt') }}"  # returns list of lines
+  ansible.builtin.debug:
+    msg: "{{ item }}"
+  loop: "{{ lines }}"
+
+
+===========================
+
+Lab Layout (create these files locally)
+
+.
+├── Test1.yaml
+├── ansible.cfg
+├── files
+│   ├── app.secret
+│   ├── config.ini
+│   ├── configs
+│   │   ├── myapp.yaml
+│   │   └── myappdev.yaml
+│   ├── motd.txt
+│   └── seed
+│       ├── 01_welcome.txt
+│       └── 02_readme.txt
+├── hosts
+└── templates
+    └── snippet.j2
+
+
+File Content:
+
+files/motd.txt
+Welcome to AutomateOps!
+
+
+
+files/configs/myapp.yaml
+
+app:
+  name: automateops
+  env: default
+database:
+  host: db.default.local
+  port: 3306
+
+files/configs/myapp-dev.yaml 
+
+app:
+  name: automateops
+  env: dev
+database:
+  host: db.dev.local
+  port: 3306
+
+files/seed/01_welcome.txt
+Welcome from AutomateOps seed!
+
+files/seed/02_readme.txt
+This is a readme file for seed demonstration.
+
+files/config.ini
+
+[api]
+endpoint=https://api.automateops.local/v1
+token=PLACEHOLDER
+
+
+
+lookup_lab.yaml
+
+---
+# =========================================================
+# AutomateOps – Lookup Plugins Crash Course
+# Demonstrates: file, env, pipe, url, template, password,
+# first_found, fileglob, ini
+# =========================================================
+
+- name: Lookup crash course (controller-side demos)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    lab_root: "{{ playbook_dir }}"
+    files_dir: "{{ lab_root }}/files"
+    templates_dir: "{{ lab_root }}/templates"
+    settings:
+      app_name: AutomateOps
+      region: ap_south-1
+      replicas: 3
+
+    # --------------------------
+    # 1) file: read a file
+    # --------------------------
+    motd_text: "{{ lookup('file', files_dir ~ '/motd.txt') }}"
+
+    # --------------------------
+    # 2) env: environment variables
+    # --------------------------
+
+    deploy_env: "{{ lookup('env', 'DEPLOY_ENV') or 'dev' }}"
+
+    # --------------------------
+    # 3) pipe: run local command
+    # Handle empty output with `or 'fallback'`
+    # --------------------------
+    short_date: "{{ (lookup('pipe', 'date +%Y-%m-%d', errors= 'ignore') or '1970-01-01') }}"
+    host_name:  "{{ (lookup('pipe', 'hostname', errors='ignore') or 'unknown-host') }}"
+
+    # --------------------------
+    # 4) url: fetch remote content (public, lightweight)
+    # Use httpbin; split_lines=False keeps text as one string
+    # --------------------------
+    httpbin_json_raw: "{{ lookup('url', 'https://httpbin.org/json', split_lines=False) | from_json}}"
+
+    # --------------------------
+    # 5) template: render into a string (no file write)
+    # --------------------------
+    rendered_snippet: "{{ lookup('template', templates_dir ~ '/snippet.j2') }}"
+
+    # --------------------------
+    # 6) password: idempotent secret generation and reuse
+    # --------------------------
+    app_secret: "{{ lookup('password', files_dir ~ '/app.secret length=20') }}"
+
+    # --------------------------
+    # 7) first_found: choose env config (dev -&gt; default fallback)
+    # --------------------------
+    chosen_cfg_path: >-
+      {{ lookup( 
+           'first_found', 
+           {
+             'files': [
+             'myapp-' ~ deploy_env ~ '.yaml',
+             'myapp.yaml',
+             'default.yaml' 
+           ],
+           'paths': [ files_dir ~ '/configs' ]
+      }, 
+      errors= 'ignore' 
+      ) }}
+
+    # Read chosen YAML content (if exists)
+    chosen_cfg_text: "{{ lookup('file', chosen_cfg_path, errors='ignore') | default('') }}"
+    chosen_cfg: "{{ (chosen_cfg_text |  from_yaml) if chosen_cfg_text| length > 0 else {} }}"
+
+    # --------------------------
+    # 8) fileglob: collect matching files
+    # --------------------------
+    seed_files: "{{ query('fileglob', files_dir ~ '/seed/*.txt') }}"
+
+    # --------------------------
+    # 9) ini: read values from INI-style file
+    # --------------------------
+    api_endpoint: "{{ lookup('ini', 'endpoint section=api file=' ~ files_dir ~ '/config.ini') }}"
+    api_token:    "{{ lookup('ini', 'token section=api file=' ~ files_dir ~ '/config.ini') }}"
+
+  
+  tasks:
+    # 1) file
+    - name: Show MOTD text loaded via file lookup
+      ansible.builtin.debug:
+        msg: "MOTD: {{ motd_text }}"
+      tags:
+         - motd
+
+    # 2) env
+    - name: Show DEPLOY_ENV picked via env lookup
+      ansible.builtin.debug:
+        msg: "DEPLOY_ENV is {{ deploy_env }}"
+      tags:
+          - env
+
+    # 3) pipe
+    - name: Show controller-side date and hostname via pipe lookup
+      ansible.builtin.debug:
+        msg: "Date={{ short_date }} Hostname={{ host_name }}"
+      tags:
+          - pipe
+
+    # 4) url
+    - name: Show httpbin slideshow title via url lookup
+      ansible.builtin.debug:
+        msg: "httpbin slideshow title ==> {{ httpbin_json_raw.slideshow.title | default('N/A') }}"
+      tags:
+         - url
+
+    # 5) template
+    - name: Show inline rendered snippet via template lookup
+      ansible.builtin.debug:
+        msg: "{{ rendered_snippet }}"
+      tags:
+          - template
+
+    # 6) password
+    - name: Write app.secret to a temp location (demo only)
+      become: true
+      ansible.builtin.copy:
+        dest: "/tmp/app.secret"
+        content: "{{ app_secret }}"
+        owner: "{{ ansible_user | default('root') }}"
+        mode: "0600"
+      tags:
+          - password
+
+    # 7) first_found (+ yaml)
+    - name: Show chosen config path by first_found
+      ansible.builtin.debug:
+        msg: "Chosen config path = {{ chosen_cfg_path }}"
+      tags:
+          - chosen_config_path
+
+    - name: Show selected config (parsed YAML)
+      ansible.builtin.debug:
+        var: chosen_cfg
+      tags:
+          - chosen_cfg
+
+    # 8) fileglob
+    - name: List seed files collected via fileglob
+      ansible.builtin.debug:
+        msg: "{{ seed_files | map('basename') | list }}"
+      tags:
+          - fileglob
+
+    - name: Create the destination directory /tmp/seed_demo
+      ansible.builtin.file:
+            path: /tmp/seed_demo
+            state: directory
+
+    - name: Copy all seed files to /tmp/seed_demo/
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "/tmp/seed_demo/{{ item | basename }}"
+      loop: "{{ seed_files }}"
+      tags:
+          - seed
+
+    # 9) ini
+    - name: Show INI values via ini lookup
+      ansible.builtin.debug:
+        msg: "API endpoint={{ api_endpoint }} | token={{ api_token }}"
+      tags:
+          - ini
+...
