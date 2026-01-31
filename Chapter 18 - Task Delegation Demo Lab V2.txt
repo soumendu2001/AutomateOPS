@@ -1,0 +1,115 @@
+---
+# ------------------------------------------------------------
+# PLAY 1: Ensure SSH keypair exists on the Control node (localhost)
+# ------------------------------------------------------------
+- name: Ensure controller SSH keypair exists
+  hosts: control
+  connection: local
+  gather_facts: true
+  become: false
+
+  vars:
+    controller_key_path: "{{ ansible_env.HOME }}/.ssh/id_rsa"
+    home_dir: "{{ lookup('env','HOME') }}"
+    ansible_ssh_private_key_file: "{{ home_dir }}/target_connect.pem"
+
+  tasks:
+    - name: Fix permissions on SSH private key if needed
+      file:
+        path: "{{ ansible_ssh_private_key_file }}"
+        mode: '0600'
+      delegate_to: localhost
+      run_once: true
+    - name: Ensure ~/.ssh directory exists on controller
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.ssh"
+        state: directory
+        mode: "0700"
+
+    - name: Generate SSH keypair on controller if missing
+      community.crypto.openssh_keypair:
+        path: "{{ controller_key_path }}"
+        type: rsa
+        size: 2048
+      register: controller_keygen
+
+    - name: Display key generation status
+      ansible.builtin.debug:
+        msg: >-
+          Controller SSH keypair is ready at {{ controller_key_path }}
+          (changed={{ controller_keygen.changed | default(false) }}).
+
+# ------------------------------------------------------------
+# PLAY 2: Install controller public key on all Target nodes
+# ------------------------------------------------------------
+- name: Configure passwordless SSH from controller -> targets
+  hosts: target
+  gather_facts: false
+  become: true
+  become_user: "{{ ansible_user }}"
+
+  vars:
+    # Public key read happens on the controller via lookup()
+    controller_pubkey: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+      #remote_user_home: "/home/{{ ansible_user }}"
+    remote_ssh_dir: "{{ remote_user_home }}/.ssh"
+    remote_authorized_keys: "{{ remote_ssh_dir }}/authorized_keys"
+
+  tasks:
+    - name: Get Remote user's home
+      ansible.builtin.shell: "echo $HOME"
+      register: home
+      changed_when: false
+    - set_fact:
+        remote_user_home: "{{ home.stdout }}"
+    - name: Ensure target user's home exists (sanity check)
+      ansible.builtin.stat:
+        path: "{{ remote_user_home }}"
+      register: home_stat
+
+    - name: Fail if expected home directory is missing
+      ansible.builtin.fail:
+        msg: "Home directory {{ remote_user_home }} not found for user {{ ansible_user }} on {{ inventory_hostname }}."
+      when: not home_stat.stat.exists
+
+    - name: Ensure .ssh directory exists for target login user
+      ansible.builtin.file:
+        path: "{{ remote_ssh_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0700"
+
+    - name: Add controller public key to authorized_keys for target login user
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        state: present
+        key: "{{ controller_pubkey }}"
+        path: "{{ remote_authorized_keys }}"
+        manage_dir: false
+
+    - name: Enforce correct permissions on authorized_keys
+      ansible.builtin.file:
+        path: "{{ remote_authorized_keys }}"
+        state: file
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0600"
+
+# ------------------------------------------------------------
+# PLAY 3 (Optional): Validate SSH from controller -> targets
+# ------------------------------------------------------------
+- name: Validate passwordless SSH from controller -> targets (optional)
+  hosts: target
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Test SSH login from controller to this target user (no password)
+      ansible.builtin.command: >
+        ssh -o BatchMode=yes
+            -o StrictHostKeyChecking=no
+            -o UserKnownHostsFile=/dev/null
+            {{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}
+            "echo SSH_OK && hostname"
+      delegate_to: localhost
