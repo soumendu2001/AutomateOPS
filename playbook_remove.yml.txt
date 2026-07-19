@@ -1,0 +1,24 @@
+---
+- name: Ansible win_file Module Demo
+  hosts: windows
+  gather_facts: no
+
+  tasks:
+
+    - name: Remove a file
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs\old.log
+        state: absent
+
+
+    - name: Remove folder recursively
+      ansible.windows.win_file:
+        path: C:\Ansible\Temp
+        state: absent
+
+    - name: Remove Ansible folder recurisvely
+      ansible.windows.win_file:
+        state: absent
+        path: C:\Ansible
+
+...

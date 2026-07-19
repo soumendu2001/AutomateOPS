@@ -1,0 +1,33 @@
+---
+- name: Ansible win_file Module Demo
+  hosts: windows
+  gather_facts: no
+
+  tasks:
+
+    - name: Create a directory
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs
+        state: directory
+
+    - name: Create nested directories
+      ansible.windows.win_file:
+        path: C:\Ansible\Projects\App1\Logs
+        state: directory
+
+    - name: Touch a file (create if not exists)
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs\app.log
+        state: touch
+
+    - name: Create another file for deletion demo
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs\old.log
+        state: touch
+
+
+    - name: Create demo directory to delete
+      ansible.windows.win_file:
+        path: C:\Ansible\Temp\TestFolder
+        state: directory
+...
