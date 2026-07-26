@@ -1,0 +1,104 @@
+---
+- name: Ansible win_file and win_stat Complete Demo
+  hosts: windows
+  gather_facts: no
+
+  tasks:
+
+    #################################################################
+    # PART 1 - CREATE FILES AND DIRECTORIES
+    #################################################################
+
+    - name: Create Logs directory
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs
+        state: directory
+
+    - name: Create nested directory structure
+      ansible.windows.win_file:
+        path: C:\Ansible\Projects\App1\Logs
+        state: directory
+
+    - name: Create application log file
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs\app.log
+        state: touch
+
+    - name: Create file for deletion demo
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs\old.log
+        state: touch
+
+    - name: Create temporary folder
+      ansible.windows.win_file:
+        path: C:\Ansible\Temp\TestFolder
+        state: directory
+
+    #################################################################
+    # PART 2 - VERIFY USING WIN_STAT
+    #################################################################
+
+    - name: Check app.log file
+      ansible.windows.win_stat:
+        path: C:\Ansible\Logs\app.log
+      register: app_log_info
+
+    - name: Display file existence
+      debug:
+        msg: "app.log exists = {{ app_log_info.stat.exists }}"
+
+    - name: Display file size
+      debug:
+        msg: "app.log size = {{ app_log_info.stat.size | default('N/A') }} bytes"
+
+    - name: Display last modified time
+      debug:
+        msg: "Last modified = {{ app_log_info.stat.lastwritetime | default('N/A') }}"
+
+    - name: Verify Logs directory
+      ansible.windows.win_stat:
+        path: C:\Ansible\Logs
+      register: log_dir_info
+
+    - name: Display folder status
+      debug:
+        msg: "Logs folder exists = {{ log_dir_info.stat.exists }}"
+
+#########################################################
+
+# PAUSE
+
+#################################################################
+- name: Pause for demo verification
+pause:
+
+prompt: "Check the files/folders on Windows and press ENTER"
+
+    #################################################################
+    # PART 3 - CONDITIONAL FILE DELETION
+    #################################################################
+
+    - name: Check old.log file
+      ansible.windows.win_stat:
+        path: C:\Ansible\Logs\old.log
+      register: old_log_info
+
+    - name: Delete old.log only if it exists
+      ansible.windows.win_file:
+        path: C:\Ansible\Logs\old.log
+        state: absent
+      when: old_log_info.stat.exists
+
+    #################################################################
+    # PART 4 - CLEANUP DEMO
+    #################################################################
+
+    - name: Remove Temp directory recursively
+      ansible.windows.win_file:
+        path: C:\Ansible\Temp
+        state: absent
+
+    - name: Remove entire Ansible folder recursively
+      ansible.windows.win_file:
+        path: C:\Ansible
+        state: absent
