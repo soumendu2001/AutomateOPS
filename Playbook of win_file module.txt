@@ -1,0 +1,26 @@
+---
+- name: Copy Single File to Windows
+  hosts: windows
+  gather_facts: no
+
+  tasks:
+
+    - name: Create application config directory
+      win_file:
+        path: C:\App\Config
+        state: directory
+
+    - name: Copy application config file
+      win_copy:
+        src: ../files/app.config
+        dest: C:\App\Config\app.config
+
+    - name: Verify file exists
+      win_stat:
+        path: C:\App\Config\app.config
+      register: config_file
+
+    - name: Display verification result
+      debug:
+        msg: "File copied successfully: {{ config_file.stat.exists }}"
+...
