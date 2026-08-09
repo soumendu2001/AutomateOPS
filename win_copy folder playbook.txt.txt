@@ -1,0 +1,22 @@
+---
+- name: Copy Folder to Windows
+  hosts: windows
+  gather_facts: no
+
+  tasks:
+
+    - name: Create destination folder
+      win_file:
+        path: C:\Scripts
+        state: directory
+
+    - name: Copy scripts folder
+      win_copy:
+        src: ../files/scripts/
+        dest: C:\Scripts
+
+    - name: Display success message
+      debug:
+        msg: "Scripts folder deployed successfully"
+
+...
