@@ -1,0 +1,136 @@
+---
+- name: Deploy and Validate Windows Configuration Files
+  hosts: windows
+  gather_facts: false
+
+  vars:
+    config_dir: 'C:\Configs'
+    backup_dir: 'C:\Configs\backup'
+
+    config_files:
+      - app.config
+      - web.config
+      - logging.config
+
+  tasks:
+
+    #################################################################
+    # Ensure required directories exist
+    #################################################################
+
+    - name: Ensure configuration directory exists
+      ansible.windows.win_file:
+        path: "{{ config_dir }}"
+        state: directory
+      tags:
+        - setup
+
+    - name: Ensure backup directory exists
+      ansible.windows.win_file:
+        path: "{{ backup_dir }}"
+        state: directory
+      tags:
+        - setup
+
+    #################################################################
+    # Backup existing files before deployment
+    #################################################################
+
+    - name: Check if existing files are present
+      ansible.windows.win_stat:
+        path: "{{ config_dir }}\\{{ item }}"
+      loop: "{{ config_files }}"
+      register: existing_files
+      tags:
+        - backup
+
+    - name: Backup existing configuration files
+      ansible.windows.win_copy:
+        src: "{{ config_dir }}\\{{ item.item }}"
+        dest: "{{ backup_dir }}\\{{ item.item }}.bak"
+        remote_src: true
+      when: item.stat.exists
+      loop: "{{ existing_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags:
+        - backup
+
+    #################################################################
+    # Deploy configuration files
+    #################################################################
+
+    - name: Copy configuration files
+      ansible.windows.win_copy:
+        src: "../files/{{ item }}"
+        dest: "{{ config_dir }}\\{{ item }}"
+      loop: "{{ config_files }}"
+      loop_control:
+        label: "{{ item }}"
+      register: copy_results
+      tags:
+        - deploy
+
+    #################################################################
+    # Validation
+    #################################################################
+
+    - name: Validate deployed files
+      ansible.windows.win_stat:
+        path: "{{ config_dir }}\\{{ item }}"
+        get_checksum: true
+      loop: "{{ config_files }}"
+      register: file_status
+      tags:
+        - validate
+
+    - name: Fail if any file is missing
+      ansible.builtin.fail:
+        msg: "Deployment validation failed. {{ item.item }} does not exist."
+      when: not item.stat.exists
+      loop: "{{ file_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags:
+        - validate
+
+    #################################################################
+    # Reporting
+    #################################################################
+
+    - name: Display deployment status
+      ansible.builtin.debug:
+        msg:
+          - "File       : {{ item.item }}"
+          - "Exists     : {{ item.stat.exists }}"
+          - "Size       : {{ item.stat.size | default('N/A') }} bytes"
+          - "Checksum   : {{ item.stat.checksum | default('N/A') }}"
+      loop: "{{ file_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags:
+        - validate
+
+    - name: Display copy summary
+      ansible.builtin.debug:
+        msg: |
+          File: {{ item.item }}
+          Changed: {{ item.changed }}
+          Destination: {{ item.dest }}
+      loop: "{{ copy_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags:
+        - deploy
+
+    #################################################################
+    # Final Success Message
+    #################################################################
+
+    - name: Deployment completed successfully
+      ansible.builtin.debug:
+        msg: >
+          All configuration files have been deployed,
+          validated, backed up, and verified successfully.
+      tags:
+        - deploy
