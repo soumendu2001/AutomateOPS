@@ -1,0 +1,54 @@
+Video 4: Ansible Fetch Module | Copy Files from Windows to Control Node
+
+This is one of the most requested enterprise use cases.
+
+Topics Covered
+Collect logs from Windows
+Backup configuration files
+Retrieve reports
+Store centrally on Ansible Control Node
+
+
+---
+- name: Transfer and retrieve file
+  hosts: windows
+  gather_facts: no
+
+  pre_tasks:
+
+    - name: Create log directory on control node
+      delegate_to: localhost
+      file:
+        path: /home/ubuntu/windows_logs
+        state: directory
+        mode: '0755'
+
+    - name: Create Log Directory on Target node
+      delegate_to: windows1
+      ansible.windows.win_file:
+        path: C:\Temp
+        state: directory
+
+  tasks:
+
+    - name: Copy file to Windows
+      ansible.windows.win_copy:
+        src: applications/application.log
+        dest: C:\Temp\application.log
+
+    - name: Fetch file back
+      fetch:
+        src: C:\Temp\application.log
+        dest: /home/ubuntu/windows_logs/
+        flat: yes
+
+
+...
+
+Enterprise Examples
+IIS logs collection
+Event log exports
+Patch reports collection
+Audit evidence gathering
+
+
